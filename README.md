@@ -10,21 +10,40 @@
 
 ## Tabla de contenidos
 
-- [1. Visión general](#1-visión-general)
-- [2. Arquitectura del pipeline](#2-arquitectura-del-pipeline)
-- [3. Stack tecnológico](#3-stack-tecnológico)
-- [4. Fundamento teórico](#4-fundamento-teórico)
-- [5. Estructura del repositorio](#5-estructura-del-repositorio)
-- [6. Metodología y flujo de trabajo](#6-metodología-y-flujo-de-trabajo)
-- [7. Variables de entorno](#7-variables-de-entorno)
-- [8. Setup local](#8-setup-local)
-- [9. Tests y cobertura](#9-tests-y-cobertura)
-- [10. Despliegue (AWS Lambda container images)](#10-despliegue-aws-lambda-container-images)
-- [11. Cost engineering](#11-cost-engineering)
-- [12. Privacidad y cumplimiento NNA](#12-privacidad-y-cumplimiento-nna)
-- [13. Roadmap](#13-roadmap)
-- [14. Recursos](#14-recursos)
-- [15. Licencia](#15-licencia)
+- [innova-ai-engine](#innova-ai-engine)
+  - [Tabla de contenidos](#tabla-de-contenidos)
+  - [1. Visión general](#1-visión-general)
+  - [2. Arquitectura del pipeline](#2-arquitectura-del-pipeline)
+  - [3. Stack tecnológico](#3-stack-tecnológico)
+  - [4. Fundamento teórico](#4-fundamento-teórico)
+    - [Bayesian Knowledge Tracing (BKT)](#bayesian-knowledge-tracing-bkt)
+    - [Item Response Theory — 2PL (IRT)](#item-response-theory--2pl-irt)
+    - [LLM Classifier](#llm-classifier)
+    - [OCR Vision](#ocr-vision)
+  - [5. Estructura del repositorio](#5-estructura-del-repositorio)
+  - [6. Metodología y flujo de trabajo](#6-metodología-y-flujo-de-trabajo)
+    - [6.1 GSD / BMAD](#61-gsd--bmad)
+    - [6.2 AI usage logs](#62-ai-usage-logs)
+    - [6.3 Gitflow](#63-gitflow)
+    - [6.4 Reglas de código obligatorias](#64-reglas-de-código-obligatorias)
+  - [7. Variables de entorno](#7-variables-de-entorno)
+  - [8. Setup local](#8-setup-local)
+    - [Prerrequisitos](#prerrequisitos)
+    - [Pasos](#pasos)
+    - [Ejecutar un handler localmente](#ejecutar-un-handler-localmente)
+    - [Comandos frecuentes](#comandos-frecuentes)
+  - [9. Tests y cobertura](#9-tests-y-cobertura)
+    - [Suites clave](#suites-clave)
+  - [10. Despliegue (AWS Lambda container images)](#10-despliegue-aws-lambda-container-images)
+    - [Prerrequisitos AWS](#prerrequisitos-aws)
+    - [Build y deploy de una imagen](#build-y-deploy-de-una-imagen)
+    - [Build todas las imágenes](#build-todas-las-imágenes)
+    - [CI/CD (GitHub Actions)](#cicd-github-actions)
+  - [11. Cost engineering](#11-cost-engineering)
+  - [12. Privacidad y cumplimiento NNA](#12-privacidad-y-cumplimiento-nna)
+  - [13. Roadmap](#13-roadmap)
+  - [14. Recursos](#14-recursos)
+  - [15. Licencia](#15-licencia)
 
 ---
 
@@ -154,6 +173,7 @@ Selector de item: Fisher information `I(theta) = a^2 * P(theta) * (1-P(theta))`.
 ### LLM Classifier
 
 Errores `UNCLASSIFIED` (15–25% del total) se clasifican con **Claude Haiku 4.5**:
+
 - `cache_control: {"type": "ephemeral"}` en el system prompt (ontología + few-shots → ~80% cache hit)
 - `tool_choice: {"type": "tool", "name": "classify_errors"}` — forzado, nunca "auto"
 - Batch de 20 intentos por llamada → amortiza costo de prompt
@@ -422,6 +442,7 @@ python scripts/build_lambda_images.py
 `.github/workflows/ci.yml` — en cada PR: ruff + pyright + pytest --cov-fail-under=75
 
 `.github/workflows/deploy-lambdas.yml` — en merge a main:
+
 1. `uv run ruff check && uv run pyright && uv run pytest --cov-fail-under=75`
 2. `docker build` por handler
 3. `docker push` a ECR
@@ -444,6 +465,7 @@ Proyección: **1000 alumnos, 660K intentos/mes, 80% catch rate del Rule Engine**
 Costo por intento clasificado por LLM: **~$0.06/1K intentos**.
 
 **Killswitches:**
+
 - SSM Parameter `/innova/llm/paused = true` → LLM consumer cae a DLQ con metadata `paused_due_to_cost`
 - SSM Parameter `/innova/ocr/paused = true` → OCR worker cae a DLQ
 - CloudWatch billing alarm a $80 total → trigger SNS → actualiza SSM params automáticamente
@@ -490,4 +512,4 @@ Costo por intento clasificado por LLM: **~$0.06/1K intentos**.
 
 ## 15. Licencia
 
-MIT
+Innova - Team 23. Internal GPL-3.0 License.
