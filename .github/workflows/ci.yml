@@ -1,64 +1,33 @@
 name: CI
-
 on:
-  push:
-    branches: [main, "feature/**", "fix/**"]
   pull_request:
+    branches: [main]
+  push:
     branches: [main]
 
 jobs:
-  quality:
-    name: Pyright · Ruff · Pytest
+  lint-type-test:
     runs-on: ubuntu-latest
-
-    env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_TEST }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_TEST }}
-      DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
-      MONGODB_URI: ${{ secrets.MONGODB_URI_TEST }}
-      LOG_LEVEL: warning
-      OCR_CONFIDENCE_THRESHOLD: "0.7"
-      SSM_LLM_PAUSED_PARAM: /innova/llm/paused
-      SSM_OCR_PAUSED_PARAM: /innova/ocr/paused
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
         with:
-          version: "0.4"
-
-      - name: Set up Python 3.11
-        run: uv python install 3.11
-
+          python-version: "3.11"
+      - name: Install uv
+        run: pip install uv
       - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Lint (ruff check)
+        run: uv sync --all-extras
+      - name: Lint
         run: uv run ruff check src/ tests/
-
-      - name: Format check (ruff format)
+      - name: Format check
         run: uv run ruff format --check src/ tests/
-
-      - name: Type check (pyright strict — zero warnings)
+      - name: Type check
         run: uv run pyright src/
-
-      - name: Run tests with coverage
-        run: uv run pytest --cov=src --cov-report=xml --cov-report=term-missing -v
-
-      - name: Assert coverage ≥75%
-        run: uv run pytest --cov=src --cov-fail-under=75 --no-header -q
-
-      - name: Run smoke tests (1 live OCR call)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Test (excluding smoke)
+        run: uv run pytest -m "not smoke" --cov=src --cov-report=xml --cov-fail-under=75
+      - name: Smoke tests (main branch only)
+        if: github.ref == 'refs/heads/main'
         run: uv run pytest -m smoke -v
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_PROD }}
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-xml
-          path: coverage.xml
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
