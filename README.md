@@ -126,7 +126,7 @@ flowchart TB
 | Schemas | Pydantic v2 | 2.x | Validación en runtime, `model_config`, no `dict[str, Any]` |
 | ML compute | numpy + scipy | latest | BKT grid search, IRT L-BFGS-B — sin GPU |
 | LLM SDK | anthropic | ≥0.40 | `cache_control` ephemeral, `tool_use` forzado |
-| Vision SDK | google-generativeai | ≥0.8 | Gemini 2.0 Flash, free tier 1M images/month |
+| Vision SDK | google-generativeai | ≥0.8 | Gemini 2.0 Flash (pendiente migración a `google-genai` SDK en TODO-AI-1) |
 | DB async | asyncpg | latest | Pool async para Lambda handlers |
 | Logging | structlog | latest | JSON, `trace_id` propagation, sin `print()` |
 | Tests | pytest + hypothesis + moto | ≥7, ≥6 | Property-based BKT/IRT, moto para SQS/S3 |
@@ -153,7 +153,9 @@ P(Ln) = P(Ln-1 | obs) + (1 - P(Ln-1 | obs)) * p_transit   # learning transition
 
 Defaults iniciales (Corbett & Anderson 1995): `p_L0=0.3, p_T=0.1, p_S=0.1, p_G=0.2`.
 
-Calibración nocturna: grid search exhaustivo sobre `[0.05, 0.95]` step `0.05` para cada parámetro. Minimiza negative log-likelihood sobre historial del día. Escribe parámetros de vuelta a `Postgres.skill_bkt_params`.
+Calibración nocturna: grid search exhaustivo sobre `[0.05, 0.95]` step `0.05` → ~130K combinaciones por skill (skip si `p_slip + p_guess ≥ 1.0`). Minimiza negative log-likelihood agrupando intentos por estudiante. Escribe parámetros de vuelta a `Postgres.skill_bkt_params`.
+
+> **Nota de identifiabilidad:** `p_L0` y `p_transit` son confundidos en datos de secuencia única (Corbett & Anderson 1995). Los parámetros medibles (`p_slip`, `p_guess`) son los que el grid search recupera con mayor confiabilidad.
 
 ### Item Response Theory — 2PL (IRT)
 
@@ -310,9 +312,9 @@ Validadas al boot por `Settings(BaseSettings)` en `src/shared/settings.py`. **Nu
 
 ### Prerrequisitos
 
-- Python 3.11 (recomendado vía `pyenv`)
+- Python 3.11 (recomendado vía `pyenv` o `.python-version` con `pyenv`)
 - `uv` instalado: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- AWS CLI v2 configurado
+- AWS CLI v2 configurado (solo para deploy — no requerido para tests locales)
 
 ### Pasos
 
@@ -321,8 +323,8 @@ Validadas al boot por `Settings(BaseSettings)` en `src/shared/settings.py`. **Nu
 git clone git@github.com:<org>/innova-ai-engine.git
 cd innova-ai-engine
 
-# 2. Instalar dependencias (crea .venv automáticamente)
-uv sync
+# 2. Instalar dependencias + dev (crea .venv automáticamente)
+uv sync --all-extras
 
 # 3. Variables de entorno
 cp .env.example .env
@@ -331,10 +333,10 @@ cp .env.example .env
 # 4. Lint + type check
 uv run ruff check src/ tests/
 uv run ruff format --check src/ tests/
-uv run pyright src/                   # debe mostrar 0 errors, 0 warnings
+uv run pyright src/                   # 0 errors, 0 warnings (strict mode)
 
-# 5. Tests
-uv run pytest
+# 5. Tests (sin smoke — no requiere API keys)
+uv run pytest -k "not smoke" -q       # 47 tests, ~60s
 ```
 
 ### Ejecutar un handler localmente
@@ -373,10 +375,10 @@ uv add --dev <package>                 # solo dev
 ## 9. Tests y cobertura
 
 ```bash
-uv run pytest                          # todos los tests
-uv run pytest --cov-fail-under=75      # gate ≥75%
-uv run pytest -m smoke                 # smoke (solo en push a main)
-uv run pytest --hypothesis-seed=42     # reproducible
+uv run pytest -k "not smoke"           # todos los tests sin llamadas reales a APIs (47 tests)
+uv run pytest --cov=src --cov-fail-under=75  # gate ≥75%
+uv run pytest -m smoke                 # smoke (requiere API keys reales, solo en push a main)
+uv run pytest --hypothesis-seed=42     # property-based reproducible
 ```
 
 ### Suites clave
@@ -384,12 +386,13 @@ uv run pytest --hypothesis-seed=42     # reproducible
 | Suite | Tipo | Qué verifica |
 |-------|------|-------------|
 | `tests/bkt/test_update.py` | Property-based (hypothesis) | `pKnown ∈ [0,1]`, monotonicity, idempotency |
-| `tests/bkt/test_calibrate.py` | Recovery test | 1000 synthetic attempts → `|param_recovered - param_true| ≤ 0.1` |
+| `tests/bkt/test_calibrate.py` | Recovery test | 1000 synthetic attempts (10 estudiantes) → `|slip_recovered - slip_true| ≤ 0.15` y `|guess_recovered - guess_true| ≤ 0.15` |
 | `tests/irt/test_two_pl.py` | Recovery test | 1000 synthetic 2PL → `|b_recovered - b_true| < 0.2` (p90) |
 | `tests/llm_classifier/test_client.py` | Mock | `cache_control` presente, `tool_choice` forzado, response parsing |
 | `tests/ocr/test_orchestrator.py` | Mock | Escalation a Claude cuando confidence < 0.7 |
 | `tests/ocr/test_gemini_adapter.py` | Mock + `@smoke` | Schema conformance + 1 llamada real a Gemini (solo main) |
-| `tests/pipeline/test_llm_consumer.py` | Integration (moto) | SQS batch 20 → LLM call → DB write |
+| `tests/pipeline/test_llm_consumer.py` | Mock asyncpg | SQS batch 20 → LLM call → DB write + `trace_id` propagation |
+| `tests/pipeline/test_ocr_worker.py` | Mock S3 | S3 event → orchestrator → `OcrResult` schema |
 
 Spec completo: `docs/prompt/02-innova-ai-engine-testing.md`
 
