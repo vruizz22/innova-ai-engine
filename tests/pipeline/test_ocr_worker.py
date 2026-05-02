@@ -33,12 +33,16 @@ def test_ocr_worker_processes_image() -> None:
         mock_body.read.return_value = b"fake_bytes"
         mock_s3.get_object.return_value = {"Body": mock_body}
 
-        with patch("src.pipeline.ocr_worker.OcrOrchestrator") as mock_orch_cls:
-            mock_orch = MagicMock()
-            mock_orch.extract = AsyncMock(return_value=mock_result)
-            mock_orch_cls.return_value = mock_orch
+        with patch(
+            "src.pipeline.ocr_worker.strip_exif_and_validate",
+            return_value=b"fake_bytes",
+        ):
+            with patch("src.pipeline.ocr_worker.OcrOrchestrator") as mock_orch_cls:
+                mock_orch = MagicMock()
+                mock_orch.extract = AsyncMock(return_value=mock_result)
+                mock_orch_cls.return_value = mock_orch
 
-            from src.pipeline.ocr_worker import handler
+                from src.pipeline.ocr_worker import handler
 
-            result = handler(event, MagicMock())
-            assert result["processed"] == 1
+                result = handler(event, MagicMock())
+                assert result["processed"] == 1
