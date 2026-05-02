@@ -8,6 +8,7 @@ import structlog
 
 from src.observability.logging import configure_logging
 from src.observability.tracing import bind_trace_id
+from src.ocr.image_utils import strip_exif_and_validate
 from src.ocr.orchestrator import OcrOrchestrator
 from src.shared.settings import get_settings
 
@@ -43,7 +44,7 @@ async def _main(event: dict[str, object],
         key = str(obj.get("key", ""))
 
         response = s3_client.get_object(Bucket=bucket_name, Key=key)
-        image_bytes: bytes = response["Body"].read()
+        image_bytes: bytes = strip_exif_and_validate(response["Body"].read())
 
         result = await orchestrator.extract(image_bytes, trace_id=trace_id)
         logger.info(
