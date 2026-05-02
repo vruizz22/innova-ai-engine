@@ -6,8 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    anthropic_api_key: str = ""
-    gemini_api_key: str = ""
+    anthropic_api_key: str
+    gemini_api_key: str
     database_url: str = "postgresql://localhost/innova"
     mongodb_uri: str = "mongodb://localhost/innova"
     log_level: str = "info"
@@ -24,5 +24,5 @@ _settings: Settings | None = None
 def get_settings() -> Settings:
     global _settings
     if _settings is None:
-        _settings = Settings()
+        _settings = Settings()  # type: ignore[call-arg]
     return _settings
