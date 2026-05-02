@@ -73,7 +73,7 @@ functions:
     memorySize: 512
     events:
       - sqs:
-          arn: ${env:SQS_LLM_CLASSIFY_ARN, ''}
+          arn: "arn:aws:sqs:us-east-1:${env:AWS_ACCOUNT_ID}:innova-backend-serverless-prod-llm-classify-queue"
           batchSize: 20
           maximumBatchingWindow: 60
           functionResponseType: ReportBatchItemFailures
