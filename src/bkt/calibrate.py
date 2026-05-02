@@ -4,8 +4,8 @@ from itertools import product
 
 import numpy as np
 
-from .schemas import AttemptObservation, BktParams
-from .update import bkt_update
+from src.bkt.schemas import AttemptObservation, BktParams
+from src.bkt.update import bkt_update
 
 
 def _compute_log_likelihood(
