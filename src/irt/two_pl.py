@@ -5,7 +5,7 @@ from typing import cast
 import numpy as np
 from scipy.optimize import minimize  # type: ignore[import-untyped]
 
-from .schemas import IrtItemParams
+from src.irt.schemas import IrtItemParams
 
 MIN_ATTEMPTS = 50
 
