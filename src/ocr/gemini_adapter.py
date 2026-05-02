@@ -7,8 +7,8 @@ import structlog
 from google import genai  # type: ignore[import-untyped]
 from google.genai import types as genai_types  # type: ignore[import-untyped]
 
-from ..shared.settings import get_settings
-from .schemas import OcrProvider, OcrResult
+from src.shared.settings import get_settings
+from src.ocr.schemas import OcrProvider, OcrResult
 
 logger = structlog.get_logger()
 
