@@ -35,7 +35,6 @@ provider:
     GEMINI_API_KEY: ${env:GEMINI_API_KEY, ''}
     DATABASE_URL: ${env:DATABASE_URL, ''}
     MONGODB_URI: ${env:MONGODB_URI, ''}
-    AWS_REGION: us-east-1
     LOG_LEVEL: ${env:LOG_LEVEL, 'info'}
 
 custom:
