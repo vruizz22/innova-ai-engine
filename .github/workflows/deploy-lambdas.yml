@@ -1,10 +1,7 @@
 name: Deploy AI Lambdas
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+  workflow_dispatch:  # solo manual — deploy real usa deploy.yml con serverless
 
 jobs:
   test-and-build:
