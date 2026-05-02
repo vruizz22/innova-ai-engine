@@ -21,8 +21,7 @@ def test_nightly_irt_calibrates_one_item() -> None:
     event: dict[str, object] = {}
     rng = np.random.default_rng(42)
     thetas = rng.normal(0, 1, 100)
-    rows = [{"theta": float(t), "is_correct": bool(
-        rng.random() < 0.5)} for t in thetas]
+    rows = [{"theta": float(t), "is_correct": bool(rng.random() < 0.5)} for t in thetas]
 
     mock_pool = AsyncMock()
     mock_pool.fetch.side_effect = [[{"id": "item-1"}], rows]

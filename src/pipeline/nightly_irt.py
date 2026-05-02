@@ -13,8 +13,7 @@ from src.shared.postgres import get_pool
 logger = structlog.get_logger()
 
 
-async def _main(event: dict[str, object],
-                context: object) -> dict[str, object]:
+async def _main(event: dict[str, object], context: object) -> dict[str, object]:
     configure_logging()
     trace_id = str(uuid.uuid4())
     bind_trace_id(trace_id)
@@ -38,8 +37,7 @@ async def _main(event: dict[str, object],
             item_id,
         )
 
-        observations = [(2.0 * float(r["theta"]) - 1.0,
-                         bool(r["is_correct"])) for r in rows]
+        observations = [(2.0 * float(r["theta"]) - 1.0, bool(r["is_correct"])) for r in rows]
         params = fit_2pl(item_id=str(item_id), attempts=observations)
 
         await pool.execute(

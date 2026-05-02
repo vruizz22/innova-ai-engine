@@ -34,14 +34,8 @@ def test_nightly_bkt_calibrates_skill_with_sufficient_data() -> None:
     for i in range(60):
         p_c = p_known * (1 - true.p_slip) + (1 - p_known) * true.p_guess
         is_correct = rng.random() < p_c
-        rows.append(
-            {"student_id": "s1", "is_correct": is_correct, "ts": float(i)})
-        p_known = _bkt_update(
-            p_known,
-            true.p_transit,
-            true.p_slip,
-            true.p_guess,
-            is_correct)
+        rows.append({"student_id": "s1", "is_correct": is_correct, "ts": float(i)})
+        p_known = _bkt_update(p_known, true.p_transit, true.p_slip, true.p_guess, is_correct)
 
     mock_pool = AsyncMock()
     mock_pool.fetch.side_effect = [[{"id": "skill-1"}], rows]

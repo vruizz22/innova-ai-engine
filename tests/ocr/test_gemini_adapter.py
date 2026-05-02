@@ -9,9 +9,7 @@ import pytest
 from src.ocr.schemas import OcrProvider, OcrResult
 
 
-def _build_gemini_response(
-        latex_steps: list[str],
-        confidence: float) -> MagicMock:
+def _build_gemini_response(latex_steps: list[str], confidence: float) -> MagicMock:
     payload = json.dumps(
         {
             "latex_steps": latex_steps,
@@ -30,14 +28,13 @@ def test_gemini_adapter_returns_valid_schema() -> None:
         mock_instance = MagicMock()
         mock_cls.return_value = mock_instance
         mock_instance.models.generate_content.return_value = _build_gemini_response(
-            latex_steps=["345", "345-178", "167"], confidence=0.92, )
+            latex_steps=["345", "345-178", "167"],
+            confidence=0.92,
+        )
         from src.ocr.gemini_adapter import GeminiAdapter
 
         adapter = GeminiAdapter()
-        result = asyncio.run(
-            adapter.extract(
-                image_bytes=b"fake",
-                trace_id="test"))
+        result = asyncio.run(adapter.extract(image_bytes=b"fake", trace_id="test"))
 
         assert isinstance(result, OcrResult)
         assert result.overall_confidence == 0.92
@@ -51,9 +48,6 @@ def test_gemini_live_smoke() -> None:
     from src.ocr.gemini_adapter import GeminiAdapter
 
     adapter = GeminiAdapter()
-    result = asyncio.run(
-        adapter.extract(
-            image_bytes=b"fake_image",
-            trace_id="smoke"))
+    result = asyncio.run(adapter.extract(image_bytes=b"fake_image", trace_id="smoke"))
     assert isinstance(result, OcrResult)
     assert result.overall_confidence >= 0.0

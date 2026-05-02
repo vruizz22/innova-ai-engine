@@ -26,20 +26,14 @@ Return a JSON object with fields:
 class GeminiAdapter:
     def __init__(self) -> None:
         settings = get_settings()
-        self._client = genai.Client(
-            api_key=settings.gemini_api_key)  # type: ignore[attr-defined]
+        self._client = genai.Client(api_key=settings.gemini_api_key)  # type: ignore[attr-defined]
 
-    async def extract(
-            self,
-            image_bytes: bytes,
-            trace_id: str = "") -> OcrResult:
+    async def extract(self, image_bytes: bytes, trace_id: str = "") -> OcrResult:
         response = self._client.models.generate_content(  # type: ignore[attr-defined]
             model="gemini-2.0-flash",
             contents=[
                 OCR_PROMPT,
-                genai_types.Part.from_bytes(
-                    data=image_bytes,
-                    mime_type="image/jpeg"),
+                genai_types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
                 # type: ignore[attr-defined]
             ],
         )
@@ -47,22 +41,12 @@ class GeminiAdapter:
             parsed: dict[str, object] = json.loads(response.text or "")
         except Exception:
             logger.warning("gemini_ocr_parse_failed", trace_id=trace_id)
-            return OcrResult(
-                latex_steps=[],
-                overall_confidence=0.0,
-                provider=OcrProvider.GEMINI)
+            return OcrResult(latex_steps=[], overall_confidence=0.0, provider=OcrProvider.GEMINI)
 
         return OcrResult(
-            latex_steps=[
-                str(s) for s in cast(
-                    list[object],
-                    parsed.get("latex_steps") or [])],
-            overall_confidence=float(
-                cast(
-                    float,
-                    parsed.get("overall_confidence") or 0.0)),
+            latex_steps=[str(s) for s in cast(list[object], parsed.get("latex_steps") or [])],
+            overall_confidence=float(cast(float, parsed.get("overall_confidence") or 0.0)),
             provider=OcrProvider.GEMINI,
-            topic_hint=str(
-                parsed["topic_hint"]) if parsed.get("topic_hint") else None,
+            topic_hint=str(parsed["topic_hint"]) if parsed.get("topic_hint") else None,
             cost_estimated_usd=0.0,
         )

@@ -18,6 +18,7 @@ def _compute_log_likelihood(
     """Compute log-likelihood of attempt sequence under given BKT params."""
     # Group by student
     from collections import defaultdict
+
     by_student: dict[str, list[AttemptObservation]] = defaultdict(list)
     for a in attempts:
         by_student[a.student_id].append(a)
@@ -33,12 +34,7 @@ def _compute_log_likelihood(
                 total_ll += np.log(p_correct)
             else:
                 total_ll += np.log(1.0 - p_correct)
-            p_known = bkt_update(
-                p_known,
-                p_transit,
-                p_slip,
-                p_guess,
-                obs.is_correct)
+            p_known = bkt_update(p_known, p_transit, p_slip, p_guess, obs.is_correct)
     return float(total_ll)
 
 
@@ -54,19 +50,13 @@ def calibrate_skill(attempts: list[AttemptObservation]) -> BktParams:
     for p_l0, p_transit, p_slip, p_guess in product(grid, grid, grid, grid):
         if p_slip + p_guess >= 1.0:
             continue
-        ll = _compute_log_likelihood(
-            attempts, p_l0, p_transit, p_slip, p_guess)
+        ll = _compute_log_likelihood(attempts, p_l0, p_transit, p_slip, p_guess)
         if ll > best_ll:
             best_ll = ll
             best_params = (p_l0, p_transit, p_slip, p_guess)
 
     if best_params is None:
-        return BktParams(
-            p_l0=0.3,
-            p_transit=0.1,
-            p_slip=0.1,
-            p_guess=0.2,
-            log_likelihood=best_ll)
+        return BktParams(p_l0=0.3, p_transit=0.1, p_slip=0.1, p_guess=0.2, log_likelihood=best_ll)
 
     return BktParams(
         p_l0=best_params[0],

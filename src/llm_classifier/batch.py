@@ -10,8 +10,7 @@ from src.llm_classifier.schemas import Attempt, AttemptClassification
 logger = structlog.get_logger()
 
 
-def parse_tool_use_response(
-        mock_response: object) -> list[AttemptClassification]:
+def parse_tool_use_response(mock_response: object) -> list[AttemptClassification]:
     """Parse a tool_use response object into AttemptClassification list."""
     for block in mock_response.content:  # type: ignore[attr-defined]
         # type: ignore[attr-defined]
@@ -19,8 +18,7 @@ def parse_tool_use_response(
             # type: ignore[attr-defined]
             raw = cast(dict[str, object], block.input)
             classifications = cast(list[object], raw["classifications"])
-            return [AttemptClassification.model_validate(
-                c) for c in classifications]
+            return [AttemptClassification.model_validate(c) for c in classifications]
     return []
 
 

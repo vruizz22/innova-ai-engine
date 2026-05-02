@@ -22,13 +22,11 @@ def _extract_trace_id(record: dict[str, object]) -> str:
     return ""
 
 
-async def _main(event: dict[str, object],
-                context: object) -> dict[str, object]:
+async def _main(event: dict[str, object], context: object) -> dict[str, object]:
     configure_logging()
 
     raw_records = event.get("Records", [])
-    records: list[dict[str, object]] = list(
-        raw_records) if isinstance(raw_records, list) else []
+    records: list[dict[str, object]] = list(raw_records) if isinstance(raw_records, list) else []
     if not records:
         return {"processed": 0}
 
@@ -63,10 +61,7 @@ async def _main(event: dict[str, object],
                     c.attempt_id,
                 )
 
-    logger.info(
-        "llm_batch_classified",
-        n=len(classifications),
-        trace_id=trace_id)
+    logger.info("llm_batch_classified", n=len(classifications), trace_id=trace_id)
     return {"processed": len(classifications)}
 
 

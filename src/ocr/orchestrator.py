@@ -15,10 +15,7 @@ class OcrOrchestrator:
         self._gemini = GeminiAdapter()
         self._claude = ClaudeAdapter()
 
-    async def extract(
-            self,
-            image_bytes: bytes,
-            trace_id: str = "") -> OcrResult:
+    async def extract(self, image_bytes: bytes, trace_id: str = "") -> OcrResult:
         settings = get_settings()
         threshold = settings.ocr_confidence_threshold
 

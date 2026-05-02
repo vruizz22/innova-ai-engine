@@ -14,8 +14,7 @@ from src.shared.postgres import get_pool
 logger = structlog.get_logger()
 
 
-async def _main(event: dict[str, object],
-                context: object) -> dict[str, object]:
+async def _main(event: dict[str, object], context: object) -> dict[str, object]:
     configure_logging()
     trace_id = str(uuid.uuid4())
     bind_trace_id(trace_id)

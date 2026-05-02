@@ -77,8 +77,7 @@ def test_tool_choice_forced() -> None:
             classify_batch(attempts=_build_attempts(20), trace_id="test-trace")
 
         call_kwargs = mock_client.messages.create.call_args.kwargs
-        assert call_kwargs["tool_choice"] == {
-            "type": "tool", "name": "classify_errors"}
+        assert call_kwargs["tool_choice"] == {"type": "tool", "name": "classify_errors"}
 
 
 def test_tool_use_response_parsed_correctly() -> None:

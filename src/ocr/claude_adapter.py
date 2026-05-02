@@ -18,10 +18,7 @@ class ClaudeAdapter:
         settings = get_settings()
         self._client = Anthropic(api_key=settings.anthropic_api_key)
 
-    async def extract(
-            self,
-            image_bytes: bytes,
-            trace_id: str = "") -> OcrResult:
+    async def extract(self, image_bytes: bytes, trace_id: str = "") -> OcrResult:
         image_b64 = base64.b64encode(image_bytes).decode()
         response = self._client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -58,21 +55,11 @@ class ClaudeAdapter:
             parsed: dict[str, object] = json.loads(text[start:end])
         except Exception:
             logger.warning("claude_ocr_parse_failed", trace_id=trace_id)
-            return OcrResult(
-                latex_steps=[],
-                overall_confidence=0.0,
-                provider=OcrProvider.CLAUDE)
+            return OcrResult(latex_steps=[], overall_confidence=0.0, provider=OcrProvider.CLAUDE)
 
         return OcrResult(
-            latex_steps=[
-                str(s) for s in cast(
-                    list[object],
-                    parsed.get("latex_steps") or [])],
-            overall_confidence=float(
-                cast(
-                    float,
-                    parsed.get("overall_confidence") or 0.0)),
+            latex_steps=[str(s) for s in cast(list[object], parsed.get("latex_steps") or [])],
+            overall_confidence=float(cast(float, parsed.get("overall_confidence") or 0.0)),
             provider=OcrProvider.CLAUDE,
-            topic_hint=str(
-                parsed["topic_hint"]) if parsed.get("topic_hint") else None,
+            topic_hint=str(parsed["topic_hint"]) if parsed.get("topic_hint") else None,
         )

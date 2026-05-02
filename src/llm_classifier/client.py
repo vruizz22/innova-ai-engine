@@ -25,17 +25,14 @@ def get_ssm_param(param_name: str) -> str:
         settings = get_settings()
         # type: ignore[misc]
         ssm = boto3.client("ssm", region_name=settings.aws_region)
-        resp: dict[str, object] = ssm.get_parameter(
-            Name=param_name)  # type: ignore[misc]
+        resp: dict[str, object] = ssm.get_parameter(Name=param_name)  # type: ignore[misc]
         param = cast(dict[str, object], resp["Parameter"])
         return str(param["Value"])
     except Exception:
         return ""
 
 
-def classify_batch(
-        attempts: list[Attempt],
-        trace_id: str = "") -> list[AttemptClassification]:
+def classify_batch(attempts: list[Attempt], trace_id: str = "") -> list[AttemptClassification]:
     """
     Single Anthropic API call with prompt caching for up to 20 attempts.
     cache_control ephemeral MUST be set on system prompt block (CI enforces this).
@@ -89,8 +86,7 @@ def classify_batch(
             # type: ignore[attr-defined]
             raw: dict[str, object] = block.input  # type: ignore[assignment]
             classifications = cast(list[object], raw["classifications"])
-            return [AttemptClassification.model_validate(
-                c) for c in classifications]
+            return [AttemptClassification.model_validate(c) for c in classifications]
 
     raise RuntimeError(
         "LLM did not return tool_use block -- should not happen with forced tool_choice"

@@ -30,42 +30,22 @@ def test_monotonic_increase_on_correct(p_known: float, n_correct: int) -> None:
     """Repeated correct answers must not decrease p_known (with p_slip=0)."""
     state = p_known
     for _ in range(n_correct):
-        new_state = bkt_update(
-            state,
-            p_transit=0.1,
-            p_slip=0.0,
-            p_guess=0.2,
-            obs=True)
+        new_state = bkt_update(state, p_transit=0.1, p_slip=0.0, p_guess=0.2, obs=True)
         assert new_state >= state - 1e-9
         state = new_state
 
 
 def test_idempotent_at_mastery() -> None:
     """Near-certain mastery should stay near-certain after correct answer."""
-    result = bkt_update(
-        p_known=0.999,
-        p_transit=0.1,
-        p_slip=0.05,
-        p_guess=0.2,
-        obs=True)
+    result = bkt_update(p_known=0.999, p_transit=0.1, p_slip=0.05, p_guess=0.2, obs=True)
     assert result > 0.99
 
 
 def test_correct_increases_pknown() -> None:
-    result = bkt_update(
-        p_known=0.5,
-        p_transit=0.1,
-        p_slip=0.1,
-        p_guess=0.2,
-        obs=True)
+    result = bkt_update(p_known=0.5, p_transit=0.1, p_slip=0.1, p_guess=0.2, obs=True)
     assert result > 0.5
 
 
 def test_incorrect_decreases_pknown() -> None:
-    result = bkt_update(
-        p_known=0.5,
-        p_transit=0.0,
-        p_slip=0.1,
-        p_guess=0.2,
-        obs=False)
+    result = bkt_update(p_known=0.5, p_transit=0.0, p_slip=0.1, p_guess=0.2, obs=False)
     assert result < 0.5

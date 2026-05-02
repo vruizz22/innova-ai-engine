@@ -24,8 +24,7 @@ def generate_synthetic_bkt_sequence(
         p_known = params.p_l0
         student_id = f"synth-student-{s}"
         for i in range(per_student):
-            p_correct = p_known * (1 - params.p_slip) + \
-                (1 - p_known) * params.p_guess
+            p_correct = p_known * (1 - params.p_slip) + (1 - p_known) * params.p_guess
             is_correct = rng.random() < p_correct
             attempts.append(
                 AttemptObservation(
@@ -36,11 +35,8 @@ def generate_synthetic_bkt_sequence(
                 )
             )
             p_known = bkt_update(
-                p_known,
-                params.p_transit,
-                params.p_slip,
-                params.p_guess,
-                is_correct)
+                p_known, params.p_transit, params.p_slip, params.p_guess, is_correct
+            )
     return attempts
 
 

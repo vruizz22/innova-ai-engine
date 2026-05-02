@@ -24,10 +24,10 @@ def test_process_batch_calls_classify() -> None:
 
     mock_results = [
         AttemptClassification(
-            attempt_id=f"att-{i}",
-            error_type="BORROW_OMITTED_TENS",
-            evidence="...",
-            confidence=0.9) for i in range(20)]
+            attempt_id=f"att-{i}", error_type="BORROW_OMITTED_TENS", evidence="...", confidence=0.9
+        )
+        for i in range(20)
+    ]
     with patch("src.llm_classifier.batch._classify_batch", return_value=mock_results):
         results = process_batch(_build_attempts(20), trace_id="t1")
         assert len(results) == 20

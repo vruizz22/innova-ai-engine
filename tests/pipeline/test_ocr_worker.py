@@ -5,8 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from src.ocr.schemas import OcrProvider, OcrResult
 
 
-def _s3_event(bucket: str = "innova-uploads",
-              key: str = "test.jpg") -> dict[str, object]:
+def _s3_event(bucket: str = "innova-uploads", key: str = "test.jpg") -> dict[str, object]:
     return {
         "Records": [
             {
@@ -22,9 +21,8 @@ def _s3_event(bucket: str = "innova-uploads",
 def test_ocr_worker_processes_image() -> None:
     event = _s3_event()
     mock_result = OcrResult(
-        latex_steps=["x=3"],
-        overall_confidence=0.9,
-        provider=OcrProvider.GEMINI)
+        latex_steps=["x=3"], overall_confidence=0.9, provider=OcrProvider.GEMINI
+    )
 
     with patch("boto3.client") as mock_boto:
         mock_s3 = MagicMock()

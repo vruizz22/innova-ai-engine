@@ -15,15 +15,13 @@ from src.shared.settings import get_settings
 logger = structlog.get_logger()
 
 
-async def _main(event: dict[str, object],
-                context: object) -> dict[str, object]:
+async def _main(event: dict[str, object], context: object) -> dict[str, object]:
     configure_logging()
     trace_id = str(uuid.uuid4())
     bind_trace_id(trace_id)
 
     raw_records = event.get("Records", [])
-    records: list[dict[str, object]] = list(
-        raw_records) if isinstance(raw_records, list) else []
+    records: list[dict[str, object]] = list(raw_records) if isinstance(raw_records, list) else []
     if not records:
         return {"processed": 0}
 

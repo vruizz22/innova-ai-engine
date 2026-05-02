@@ -7,7 +7,4 @@ from src.ocr.schemas import OcrResult
 
 @runtime_checkable
 class MathOCRPort(Protocol):
-    async def extract(
-        self,
-        image_bytes: bytes,
-        trace_id: str = "") -> OcrResult: ...
+    async def extract(self, image_bytes: bytes, trace_id: str = "") -> OcrResult: ...

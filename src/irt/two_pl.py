@@ -29,8 +29,7 @@ def fit_2pl(
         a, b = params
         p = 1.0 / (1.0 + np.exp(-a * (thetas - b)))
         p = np.clip(p, 1e-9, 1.0 - 1e-9)
-        return -float(np.sum(correct * np.log(p) +
-                      (1.0 - correct) * np.log(1.0 - p)))
+        return -float(np.sum(correct * np.log(p) + (1.0 - correct) * np.log(1.0 - p)))
 
     result = minimize(  # type: ignore[misc]
         neg_log_likelihood,

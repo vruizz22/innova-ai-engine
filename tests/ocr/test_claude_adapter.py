@@ -7,12 +7,10 @@ from unittest.mock import MagicMock, patch
 from src.ocr.schemas import OcrProvider, OcrResult
 
 
-def _build_claude_response(
-        latex_steps: list[str],
-        confidence: float) -> MagicMock:
-    payload = json.dumps({"latex_steps": latex_steps,
-                          "overall_confidence": confidence,
-                          "topic_hint": None})
+def _build_claude_response(latex_steps: list[str], confidence: float) -> MagicMock:
+    payload = json.dumps(
+        {"latex_steps": latex_steps, "overall_confidence": confidence, "topic_hint": None}
+    )
     block = MagicMock()
     block.text = payload
     response = MagicMock()
@@ -30,10 +28,7 @@ def test_claude_adapter_returns_valid_schema() -> None:
         from src.ocr.claude_adapter import ClaudeAdapter
 
         adapter = ClaudeAdapter()
-        result = asyncio.run(
-            adapter.extract(
-                image_bytes=b"fake",
-                trace_id="test"))
+        result = asyncio.run(adapter.extract(image_bytes=b"fake", trace_id="test"))
 
         assert isinstance(result, OcrResult)
         assert result.provider == OcrProvider.CLAUDE
