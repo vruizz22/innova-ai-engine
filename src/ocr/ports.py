@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from .schemas import OcrResult
+from src.ocr.schemas import OcrResult
 
 
 @runtime_checkable
