@@ -4,8 +4,8 @@ from typing import cast
 
 import structlog
 
-from .client import classify_batch as _classify_batch
-from .schemas import Attempt, AttemptClassification
+from src.llm_classifier.client import classify_batch as _classify_batch
+from src.llm_classifier.schemas import Attempt, AttemptClassification
 
 logger = structlog.get_logger()
 
