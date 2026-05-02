@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import structlog
 
-from src.shared.settings import get_settings
 from src.ocr.claude_adapter import ClaudeAdapter
 from src.ocr.gemini_adapter import GeminiAdapter
 from src.ocr.schemas import OcrResult
+from src.shared.settings import get_settings
 
 logger = structlog.get_logger()
 
