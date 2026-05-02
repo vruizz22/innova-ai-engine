@@ -37,6 +37,5 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          SQS_LLM_CLASSIFY_ARN: ${{ secrets.SQS_LLM_CLASSIFY_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: serverless deploy --stage prod
