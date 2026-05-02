@@ -1,0 +1,118 @@
+service: innova-ai-engine
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  region: us-east-1
+  stage: ${opt:stage, 'prod'}
+  ecr:
+    images:
+      ai-engine-image:
+        path: ./
+        file: Dockerfile.lambda
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+          Resource:
+            - arn:aws:ssm:us-east-1:*:parameter/innova/*
+
+  environment:
+    ANTHROPIC_API_KEY: ${env:ANTHROPIC_API_KEY, ''}
+    GEMINI_API_KEY: ${env:GEMINI_API_KEY, ''}
+    DATABASE_URL: ${env:DATABASE_URL, ''}
+    MONGODB_URI: ${env:MONGODB_URI, ''}
+    AWS_REGION: us-east-1
+    LOG_LEVEL: ${env:LOG_LEVEL, 'info'}
+
+custom:
+  customDomain:
+    domainName: ai.superprofes.app
+    basePath: ''
+    stage: ${self:provider.stage}
+    createRoute53Record: false
+    endpointType: REGIONAL
+    securityPolicy: tls_1_2
+    autoDomain: false
+
+plugins:
+  - serverless-domain-manager
+
+functions:
+  health:
+    image:
+      name: ai-engine-image
+      command:
+        - src.pipeline.health.handler
+    timeout: 10
+    memorySize: 128
+    events:
+      - http:
+          method: GET
+          path: /health
+
+  llmClassifier:
+    image:
+      name: ai-engine-image
+      command:
+        - src.pipeline.llm_consumer.handler
+    timeout: 300
+    memorySize: 512
+    events:
+      - sqs:
+          arn: "arn:aws:sqs:us-east-1:${env:AWS_ACCOUNT_ID}:innova-backend-serverless-prod-llm-classify-queue"
+          batchSize: 20
+          maximumBatchingWindow: 60
+          functionResponseType: ReportBatchItemFailures
+
+  nightlyBkt:
+    image:
+      name: ai-engine-image
+      command:
+        - src.pipeline.nightly_bkt.handler
+    timeout: 900
+    memorySize: 1024
+    events:
+      - schedule:
+          rate: cron(0 7 * * ? *)
+          enabled: true
+
+  nightlyIrt:
+    image:
+      name: ai-engine-image
+      command:
+        - src.pipeline.nightly_irt.handler
+    timeout: 900
+    memorySize: 1024
+    events:
+      - schedule:
+          rate: cron(15 7 * * ? *)
+          enabled: true
+
+  ocrWorker:
+    image:
+      name: ai-engine-image
+      command:
+        - src.pipeline.ocr_worker.handler
+    timeout: 60
+    memorySize: 512
+    events:
+      - s3:
+          bucket: innova-backend-serverless-${self:provider.stage}-ocr-uploads
+          event: s3:ObjectCreated:*
+          rules:
+            - prefix: uploads/
+          existing: true
