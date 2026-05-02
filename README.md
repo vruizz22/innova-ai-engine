@@ -17,6 +17,7 @@
   - [3. Stack tecnológico](#3-stack-tecnológico)
   - [4. Fundamento teórico](#4-fundamento-teórico)
     - [Bayesian Knowledge Tracing (BKT)](#bayesian-knowledge-tracing-bkt)
+    - [Notas de implementación en Python](#notas-de-implementación-en-python)
     - [Item Response Theory — 2PL (IRT)](#item-response-theory--2pl-irt)
     - [LLM Classifier](#llm-classifier)
     - [OCR Vision](#ocr-vision)
@@ -143,13 +144,27 @@ flowchart TB
 
 Corbett & Anderson (1995). Modelo de 4 parámetros por (alumno, skill):
 
-```
-P(Ln | obs=1) = (1 - p_slip) * P(Ln-1)
-                ─────────────────────────────────────────────────────────
-                (1 - p_slip) * P(Ln-1)  +  p_guess * (1 - P(Ln-1))
+1. **Probabilidad de conocimiento dado un acierto ($obs = 1$):**
+$$P(L_n | obs=1) = \frac{(1 - p_{slip}) \cdot P(L_{n-1})}{(1 - p_{slip}) \cdot P(L_{n-1}) + p_{guess} \cdot (1 - P(L_{n-1}))}$$
 
-P(Ln) = P(Ln-1 | obs) + (1 - P(Ln-1 | obs)) * p_transit   # learning transition
-```
+1. **Probabilidad de conocimiento dado un error ($obs = 0$):**
+   $$P(L_n | obs=0) = \frac{P(L_{n-1}) \cdot p_{slip}}{P(L_{n-1}) \cdot p_{slip} + (1 - P(L_{n-1})) \cdot (1 - p_{guess})}$$
+
+1. **Transición de aprendizaje (Learning Transition):**
+$$P(L_n) = P(L_{n-1} | obs) + (1 - P(L_{n-1} | obs)) \cdot p_{transit}$$
+
+---
+
+### Notas de implementación en Python
+
+Para mantener la consistencia con el **Pipeline BKT + IRT**
+
+- **$P(L_n)$**: Representa el *mastery* o dominio actual del estudiante
+- **$p_{slip}$**: Probabilidad de cometer un error conociendo la regla
+- **$p_{guess}$**: Probabilidad de acertar por azar sin conocer la regla
+- **$p_{transit}$**: Probabilidad de aprender el procedimiento tras una oportunidad de práctica
+
+Esta lógica es la que permite que el **Dashboard del Profesor** identifique si un error es un "descuido" (slip) o una falta real de conocimiento antes de la prueba
 
 Defaults iniciales (Corbett & Anderson 1995): `p_L0=0.3, p_T=0.1, p_S=0.1, p_G=0.2`.
 
@@ -165,12 +180,15 @@ Lord (1980). Probabilidad de respuesta correcta:
 P(correct | theta) = 1 / (1 + exp(-a * (theta - b)))
 ```
 
+$$P(correct | \theta) = \frac{1}{1 + e^{-a(\theta - b)}}$$
+
 - `a` — discriminación (diferencia alumnos que saben de los que no)
 - `b` — dificultad (theta donde P=0.5)
+- $\theta$ — dominio del alumno (estimado por BKT)
 
 Fit nightly via `scipy.optimize.minimize` con `method='L-BFGS-B'`. Mínimo 50 intentos por item para calibrar; bajo ese umbral, defaults `a=1.0, b=0.0`.
 
-Selector de item: Fisher information `I(theta) = a^2 * P(theta) * (1-P(theta))`. Pica el item que maximiza información en el nivel de dominio actual del alumno.
+Selector de item: Fisher information $I(\theta) = a^2 \cdot P(\theta) \cdot (1 - P(\theta))$. Pica el item que maximiza información en el nivel de dominio actual del alumno.
 
 ### LLM Classifier
 
