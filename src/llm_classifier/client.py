@@ -7,10 +7,10 @@ import boto3  # type: ignore[import-untyped]
 import structlog
 from anthropic import Anthropic
 
-from ..shared.settings import get_settings
-from .prompts import CACHED_BLOCK
-from .schemas import Attempt, AttemptClassification
-from .tools import CLASSIFY_TOOL
+from src.shared.settings import get_settings
+from src.llm_classifier.prompts import CACHED_BLOCK
+from src.llm_classifier.schemas import Attempt, AttemptClassification
+from src.llm_classifier.tools import CLASSIFY_TOOL
 
 logger = structlog.get_logger()
 
