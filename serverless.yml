@@ -108,10 +108,3 @@ functions:
         - src.pipeline.ocr_worker.handler
     timeout: 60
     memorySize: 512
-    events:
-      - s3:
-          bucket: innova-backend-serverless-${self:provider.stage}-ocr-uploads
-          event: s3:ObjectCreated:*
-          rules:
-            - prefix: uploads/
-          existing: true
