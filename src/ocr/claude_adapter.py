@@ -7,8 +7,8 @@ from typing import cast
 import structlog
 from anthropic import Anthropic
 
-from ..shared.settings import get_settings
-from .schemas import OcrProvider, OcrResult
+from src.shared.settings import get_settings
+from src.ocr.schemas import OcrProvider, OcrResult
 
 logger = structlog.get_logger()
 
