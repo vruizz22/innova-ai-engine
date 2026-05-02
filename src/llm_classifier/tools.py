@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-CLASSIFY_TOOL: dict[str, object] = {
+from typing import Any
+
+
+CLASSIFY_TOOL: dict[str, Any] = {
     "name": "classify_errors",
     "description": "Classify procedural math errors for a batch of student attempts.",
     "input_schema": {
