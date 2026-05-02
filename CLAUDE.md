@@ -36,6 +36,7 @@ This repo houses all **ML/AI compute workers** for Innova EdTech:
 - Pydantic v2 for ALL schemas (request/response/config). No plain dataclasses for domain schemas.
 - `pyright` configured in `pyproject.toml` with `pythonVersion = "3.11"`, `strict = true`.
 - `ruff` rules: `E, F, I, N, UP, B, RUF` enabled.
+- always use import aliases for internal imports — e.g. `from src.shared import postgres` — never relative imports or absolute imports without `src.` prefix.
 
 ---
 
