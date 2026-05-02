@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import minimize  # type: ignore[import-untyped]
 
 from .schemas import IrtItemParams
 
@@ -30,12 +32,13 @@ def fit_2pl(
         return -float(np.sum(correct * np.log(p) +
                       (1.0 - correct) * np.log(1.0 - p)))
 
-    result = minimize(
+    result = minimize(  # type: ignore[misc]
         neg_log_likelihood,
         x0=np.array([1.0, 0.0]),
         method="L-BFGS-B",
         bounds=[(0.5, 3.0), (-3.0, 3.0)],
     )
 
-    a_fit, b_fit = float(result.x[0]), float(result.x[1])
+    result_x = cast(np.ndarray, result.x)  # type: ignore[attr-defined]
+    a_fit, b_fit = float(result_x[0]), float(result_x[1])
     return IrtItemParams(item_id=item_id, a=a_fit, b=b_fit, calibrated=True)
