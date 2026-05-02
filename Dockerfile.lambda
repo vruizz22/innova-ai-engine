@@ -3,10 +3,16 @@ FROM public.ecr.aws/lambda/python:3.11
 ARG LAMBDA_NAME=llm-classifier
 ENV LAMBDA_NAME=${LAMBDA_NAME}
 
-COPY pyproject.toml ./
-RUN pip install uv && uv pip install --system --no-cache \
-    anthropic google-generativeai scipy numpy pydantic pydantic-settings \
-    structlog asyncpg boto3 httpx
+RUN pip install uv
+
+COPY pyproject.toml uv.lock ./
+RUN uv pip install --system --no-cache \
+    anthropic \
+    "google-genai>=1.74.0" \
+    scipy numpy \
+    pydantic "pydantic-settings>=2.0" \
+    structlog asyncpg boto3 httpx \
+    Pillow
 
 COPY src/ ./src/
 
