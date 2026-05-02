@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
-import boto3
+import boto3  # type: ignore[import-untyped]
 import structlog
 from anthropic import Anthropic
 
@@ -22,9 +23,12 @@ def get_ssm_param(param_name: str) -> str:
     """Read SSM parameter. Returns empty string on failure."""
     try:
         settings = get_settings()
-        client = boto3.client("ssm", region_name=settings.aws_region)
-        resp = client.get_parameter(Name=param_name)
-        return str(resp["Parameter"]["Value"])
+        # type: ignore[misc]
+        ssm = boto3.client("ssm", region_name=settings.aws_region)
+        resp: dict[str, object] = ssm.get_parameter(
+            Name=param_name)  # type: ignore[misc]
+        param = cast(dict[str, object], resp["Parameter"])
+        return str(param["Value"])
     except Exception:
         return ""
 
@@ -82,8 +86,11 @@ def classify_batch(
 
     for block in response.content:
         if block.type == "tool_use" and block.name == "classify_errors":
-            raw = block.input  # type: ignore[attr-defined]
-            return [AttemptClassification(**c) for c in raw["classifications"]]
+            # type: ignore[attr-defined]
+            raw: dict[str, object] = block.input  # type: ignore[assignment]
+            classifications = cast(list[object], raw["classifications"])
+            return [AttemptClassification.model_validate(
+                c) for c in classifications]
 
     raise RuntimeError(
         "LLM did not return tool_use block -- should not happen with forced tool_choice"
