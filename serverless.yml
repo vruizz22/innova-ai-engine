@@ -36,6 +36,11 @@ provider:
     DATABASE_URL: ${env:DATABASE_URL, ''}
     MONGODB_URI: ${env:MONGODB_URI, ''}
     LOG_LEVEL: ${env:LOG_LEVEL, 'info'}
+    OCR_CONFIDENCE_THRESHOLD: ${env:OCR_CONFIDENCE_THRESHOLD, '0.7'}
+    LLM_BATCH_SIZE: ${env:LLM_BATCH_SIZE, '20'}
+    SSM_LLM_PAUSED_PARAM: ${env:SSM_LLM_PAUSED_PARAM, '/innova/llm/paused'}
+    SSM_OCR_PAUSED_PARAM: ${env:SSM_OCR_PAUSED_PARAM, '/innova/ocr/paused'}
+    AWS_REGION: ${env:AWS_REGION, 'us-east-1'}
 
 custom:
   customDomain:
@@ -72,7 +77,7 @@ functions:
     memorySize: 512
     events:
       - sqs:
-          arn: "arn:aws:sqs:us-east-1:${env:AWS_ACCOUNT_ID}:innova-backend-serverless-prod-llm-classify-queue"
+          arn: ${env:SQS_LLM_CLASSIFY_ARN}
           batchSize: 20
           maximumBatchingWindow: 60
           functionResponseType: ReportBatchItemFailures
@@ -108,3 +113,8 @@ functions:
         - src.pipeline.ocr_worker.handler
     timeout: 60
     memorySize: 512
+    events:
+      - sqs:
+          arn: ${env:SQS_OCR_QUEUE_ARN}
+          batchSize: 5
+          functionResponseType: ReportBatchItemFailures

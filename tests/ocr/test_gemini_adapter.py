@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -43,6 +44,10 @@ def test_gemini_adapter_returns_valid_schema() -> None:
 
 
 @pytest.mark.smoke
+@pytest.mark.skipif(
+    os.getenv("RUN_LIVE_GEMINI_SMOKE") != "1",
+    reason="Set RUN_LIVE_GEMINI_SMOKE=1 to run the real Gemini smoke test.",
+)
 def test_gemini_live_smoke() -> None:
     """Smoke test: 1 real Gemini call. Runs only on push to main."""
     from src.ocr.gemini_adapter import GeminiAdapter
