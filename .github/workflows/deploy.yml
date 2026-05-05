@@ -37,5 +37,12 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          SQS_LLM_CLASSIFY_ARN: ${{ secrets.SQS_LLM_CLASSIFY_ARN }}
+          SQS_OCR_QUEUE_ARN: ${{ secrets.SQS_OCR_QUEUE_ARN }}
+          OCR_CONFIDENCE_THRESHOLD: ${{ secrets.OCR_CONFIDENCE_THRESHOLD || '0.7' }}
+          LLM_BATCH_SIZE: ${{ secrets.LLM_BATCH_SIZE || '20' }}
+          SSM_LLM_PAUSED_PARAM: ${{ secrets.SSM_LLM_PAUSED_PARAM || '/innova/llm/paused' }}
+          SSM_OCR_PAUSED_PARAM: ${{ secrets.SSM_OCR_PAUSED_PARAM || '/innova/ocr/paused' }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'info' }}
         run: serverless deploy --stage prod

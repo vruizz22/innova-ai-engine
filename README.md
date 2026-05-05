@@ -319,10 +319,14 @@ Validadas al boot por `Settings(BaseSettings)` en `src/shared/settings.py`. **Nu
 | `GEMINI_API_KEY` | Google AI Studio API key | ✅ |
 | `DATABASE_URL` | Neon Postgres connection string | ✅ |
 | `MONGODB_URI` | MongoDB Atlas M0 | ✅ |
+| `SQS_LLM_CLASSIFY_ARN` | ARN de la cola LLM creada por backend serverless | ✅ deploy |
+| `SQS_OCR_QUEUE_ARN` | ARN de la cola OCR creada por backend serverless | ✅ deploy |
 | `LOG_LEVEL` | `debug` / `info` / `warning` | ❌ (default: `info`) |
 | `OCR_CONFIDENCE_THRESHOLD` | Umbral Gemini→Claude escalation | ❌ (default: `0.7`) |
+| `LLM_BATCH_SIZE` | Tamaño de lote para clasificación LLM | ❌ (default: `20`) |
 | `SSM_LLM_PAUSED_PARAM` | SSM path para killswitch LLM | ❌ (default: `/innova/llm/paused`) |
 | `SSM_OCR_PAUSED_PARAM` | SSM path para killswitch OCR | ❌ (default: `/innova/ocr/paused`) |
+| `AWS_REGION` | Región AWS para S3/SSM/SQS | ❌ (default: `us-east-1`) |
 
 ---
 
