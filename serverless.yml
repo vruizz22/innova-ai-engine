@@ -40,7 +40,7 @@ provider:
     LLM_BATCH_SIZE: ${env:LLM_BATCH_SIZE, '20'}
     SSM_LLM_PAUSED_PARAM: ${env:SSM_LLM_PAUSED_PARAM, '/innova/llm/paused'}
     SSM_OCR_PAUSED_PARAM: ${env:SSM_OCR_PAUSED_PARAM, '/innova/ocr/paused'}
-    AWS_REGION: ${env:AWS_REGION, 'us-east-1'}
+    APP_AWS_REGION: ${env:APP_AWS_REGION, 'us-east-1'}
 
 custom:
   customDomain:

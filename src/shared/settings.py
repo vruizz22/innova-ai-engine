@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     llm_batch_size: int = 20
     ssm_llm_paused_param: str = "/innova/llm/paused"
     ssm_ocr_paused_param: str = "/innova/ocr/paused"
-    aws_region: str = "us-east-1"
+    app_aws_region: str = "us-east-1"
 
 
 _settings: Settings | None = None
