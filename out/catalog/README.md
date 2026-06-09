@@ -78,15 +78,16 @@ pnpm prisma migrate dev --name plan_v8_error_taxonomy   # genera migración + re
 pnpm prisma db seed
 
 # 2. Validar el catálogo SIN escribir (dry-run) — un dominio o el combinado
-pnpm tsx scripts/import-error-catalog.ts --input=../innova-ai-engine/out/catalog/01-arith.jsonl --dry-run
+#    (este repo usa ts-node, NO tsx; el script vive como pnpm script "import:catalog")
+pnpm import:catalog --input=../innova-ai-engine/out/catalog/01-arith.jsonl --dry-run
 
 # 3. Combinar todos los dominios e importar de verdad (idempotente, upsert por code)
 cat ../innova-ai-engine/out/catalog/*.jsonl > ../innova-ai-engine/out/error_catalog.jsonl
-pnpm tsx scripts/import-error-catalog.ts --input=../innova-ai-engine/out/error_catalog.jsonl
+pnpm import:catalog --input=../innova-ai-engine/out/error_catalog.jsonl
 
 # 4. (Tras revisión pedagógica) pasar DRAFT → ACTIVE y regenerar el enum TS
 #    psql "$DATABASE_URL" -c "UPDATE error_tags SET status='ACTIVE' WHERE status='DRAFT';"
-pnpm tsx scripts/codegen-error-tags.ts
+pnpm codegen:error-tags
 ```
 
 > Primero contra **staging**, luego prod. El dry-run nunca escribe.
