@@ -11,6 +11,11 @@ class Attempt(BaseModel):
     raw_steps: list[object]
     final_answer: str
     student_id: str = ""
+    # v8: backend sends the Domain UUID + subdomain code so the worker can route to
+    # the right by-domain prompt/catalog. Optional to stay back-compatible
+    # with v7.
+    domain_id: str | None = None
+    subdomain_code: str | None = None
 
 
 class AttemptClassification(BaseModel):

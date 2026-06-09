@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
+
+from src.llm_classifier.catalog import SPECIAL_ERROR_TYPES
 
 CLASSIFY_TOOL: dict[str, Any] = {
     "name": "classify_errors",
@@ -55,3 +58,49 @@ CLASSIFY_TOOL: dict[str, Any] = {
         "required": ["classifications"],
     },
 }
+
+
+def build_classify_tool(error_codes: Sequence[str]) -> dict[str, Any]:
+    """v8 — build a `classify_errors` tool whose error_type enum is the ACTIVE
+    catalog of a single domain plus the special values (CORRECT / UNCLASSIFIED /
+    TRANSVERSAL_LIKELY). Constraining the enum keeps the model on real ErrorTag codes
+    so the FK resolves on the backend write."""
+    enum_values = [*error_codes, *SPECIAL_ERROR_TYPES]
+    return {
+        "name": "classify_errors",
+        "description": "Classify procedural math errors for a batch of student attempts.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "classifications": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 25,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "attempt_id": {
+                                "type": "string"},
+                            "error_type": {
+                                "type": "string",
+                                "enum": enum_values},
+                            "evidence": {
+                                "type": "string",
+                                "maxLength": 300},
+                            "confidence": {
+                                "type": "number",
+                                "minimum": 0.0,
+                                "maximum": 1.0,
+                            },
+                        },
+                        "required": [
+                            "attempt_id",
+                            "error_type",
+                            "evidence",
+                            "confidence",
+                        ],
+                    },
+                }},
+            "required": ["classifications"],
+        },
+    }
