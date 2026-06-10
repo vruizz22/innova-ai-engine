@@ -1,16 +1,31 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
+from typing import cast
 
 import structlog
 
-from src.llm_classifier.client import classify_batch
-from src.llm_classifier.schemas import Attempt
+from src.llm_classifier.catalog import Fetcher, get_domain_catalog
+from src.llm_classifier.client import classify_batch, classify_batch_for_domain
+from src.llm_classifier.schemas import Attempt, AttemptClassification
 from src.observability.logging import configure_logging
 from src.observability.tracing import bind_trace_id
 from src.shared.postgres import get_pool
 
 logger = structlog.get_logger()
+
+# v8: attempts has no `error_type`/`llm_evidence` columns. We resolve the LLM's error
+# code to the ErrorTag FK in-query; CORRECT / UNCLASSIFIED / TRANSVERSAL_LIKELY have no
+# row, so the subselect yields NULL and error_tag_id is cleared.
+_UPDATE_SQL = """
+UPDATE attempts
+   SET error_tag_id = (SELECT id FROM error_tags WHERE code = $1),
+       classifier_source = 'LLM',
+       confidence = $2,
+       classified_at = NOW()
+ WHERE id = $3
+"""
 
 
 def _extract_trace_id(record: dict[str, object]) -> str:
@@ -20,6 +35,32 @@ def _extract_trace_id(record: dict[str, object]) -> str:
         if isinstance(trace, dict):
             return str(trace.get("stringValue", ""))
     return ""
+
+
+def _group_by_domain(attempts: list[Attempt]
+                     ) -> dict[str | None, list[Attempt]]:
+    """A single SQS batch can mix domains; classify one group per domain (ADR A4.3)."""
+    groups: dict[str | None, list[Attempt]] = defaultdict(list)
+    for attempt in attempts:
+        groups[attempt.domain_id].append(attempt)
+    return groups
+
+
+async def _classify_group(
+    conn: Fetcher,
+    domain_id: str | None,
+    attempts: list[Attempt],
+    trace_id: str,
+) -> list[AttemptClassification]:
+    """Route a same-domain group to the by-domain prompt; fall back to the v7 generic
+    classifier when the domain is unknown or has no ACTIVE catalog."""
+    if domain_id:
+        catalog = await get_domain_catalog(conn, domain_id)
+        if catalog is not None:
+            return classify_batch_for_domain(
+                attempts, catalog, trace_id=trace_id)
+        logger.warning("no_active_catalog_for_domain", domain_id=domain_id)
+    return classify_batch(attempts, trace_id=trace_id)
 
 
 async def _main(event: dict[str, object], context: object) -> dict[str, object]:
@@ -34,30 +75,32 @@ async def _main(event: dict[str, object], context: object) -> dict[str, object]:
     bind_trace_id(trace_id)
 
     attempts = [Attempt.model_validate_json(str(r["body"])) for r in records]
-
-    try:
-        classifications = classify_batch(attempts, trace_id=trace_id)
-    except Exception as exc:
-        logger.error("llm_batch_failed", error=str(exc), n=len(attempts))
-        raise
+    groups = _group_by_domain(attempts)
 
     pool = await get_pool()
     async with pool.acquire() as conn:
+        classifications: list[AttemptClassification] = []
+        for domain_id, group in groups.items():
+            try:
+                classifications.extend(
+                    # asyncpg is untyped upstream; adapt at this boundary only.
+                    await _classify_group(cast(Fetcher, conn), domain_id, group, trace_id)
+                )
+            except Exception as exc:
+                logger.error(
+                    "llm_group_failed",
+                    error=str(exc),
+                    domain_id=domain_id,
+                    n=len(group),
+                )
+                raise
+
         async with conn.transaction():
             for c in classifications:
                 await conn.execute(
-                    """
-                    UPDATE attempts
-                       SET error_type = $1,
-                           classifier_source = 'llm',
-                           confidence = $2,
-                           llm_evidence = $3,
-                           classified_at = NOW()
-                     WHERE id = $4
-                    """,
+                    _UPDATE_SQL,
                     c.error_type,
                     c.confidence,
-                    c.evidence,
                     c.attempt_id,
                 )
 
