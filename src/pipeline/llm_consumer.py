@@ -29,12 +29,15 @@ UPDATE attempts
 
 
 def _extract_trace_id(record: dict[str, object]) -> str:
-    attrs = record.get("messageAttributes", {})
-    if isinstance(attrs, dict):
-        trace = attrs.get("trace_id", {})
-        if isinstance(trace, dict):
-            return str(trace.get("stringValue", ""))
-    return ""
+    # isinstance narrows to dict[Unknown, Unknown]; cast back to a typed mapping so
+    # .get() stays known under strict (the SQS shape is dict[str, object] in practice).
+    attrs = record.get("messageAttributes")
+    if not isinstance(attrs, dict):
+        return ""
+    trace = cast(dict[str, object], attrs).get("trace_id")
+    if not isinstance(trace, dict):
+        return ""
+    return str(cast(dict[str, object], trace).get("stringValue", ""))
 
 
 def _group_by_domain(attempts: list[Attempt]
@@ -66,8 +69,12 @@ async def _classify_group(
 async def _main(event: dict[str, object], context: object) -> dict[str, object]:
     configure_logging()
 
-    raw_records = event.get("Records", [])
-    records: list[dict[str, object]] = list(raw_records) if isinstance(raw_records, list) else []
+    raw_records = event.get("Records")
+    records: list[dict[str, object]] = (
+        cast("list[dict[str, object]]", raw_records)
+        if isinstance(raw_records, list)
+        else []
+    )
     if not records:
         return {"processed": 0}
 
