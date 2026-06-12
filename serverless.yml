@@ -19,10 +19,12 @@ provider:
             - sqs:ReceiveMessage
             - sqs:DeleteMessage
             - sqs:GetQueueAttributes
+            - sqs:SendMessage
           Resource: "*"
         - Effect: Allow
           Action:
             - s3:GetObject
+            - s3:PutObject
           Resource: "*"
         - Effect: Allow
           Action:
@@ -40,7 +42,24 @@ provider:
     LLM_BATCH_SIZE: ${env:LLM_BATCH_SIZE, '20'}
     SSM_LLM_PAUSED_PARAM: ${env:SSM_LLM_PAUSED_PARAM, '/innova/llm/paused'}
     SSM_OCR_PAUSED_PARAM: ${env:SSM_OCR_PAUSED_PARAM, '/innova/ocr/paused'}
-    AWS_REGION: ${env:AWS_REGION, 'us-east-1'}
+    APP_AWS_REGION: ${env:APP_AWS_REGION, 'us-east-1'}
+    # v9 guides pipeline — A6 guide_ingest_worker
+    SQS_SOLUTION_GEN_URL: ${env:SQS_SOLUTION_GEN_URL, ''}
+    S3_GUIDES_BUCKET: ${env:S3_GUIDES_BUCKET, ''}
+    SSM_GUIDES_INGEST_PAUSED_PARAM: ${env:SSM_GUIDES_INGEST_PAUSED_PARAM, '/innova/guides/ingest_paused'}
+    GUIDE_INGEST_CHUNK_PAGES: ${env:GUIDE_INGEST_CHUNK_PAGES, '20'}
+    GUIDE_INGEST_CHUNK_OVERLAP: ${env:GUIDE_INGEST_CHUNK_OVERLAP, '1'}
+    GUIDE_MIN_EXTRACTION_QUALITY: ${env:GUIDE_MIN_EXTRACTION_QUALITY, '0.5'}
+    # v9 guides pipeline — A7 solution_generator
+    SSM_GUIDES_SOLUTION_PAUSED_PARAM: ${env:SSM_GUIDES_SOLUTION_PAUSED_PARAM, '/innova/guides/solution_paused'}
+    SOLUTION_GEN_USE_BATCHES: ${env:SOLUTION_GEN_USE_BATCHES, 'true'}
+    SOLUTION_TOPIC_MIN_CONFIDENCE: ${env:SOLUTION_TOPIC_MIN_CONFIDENCE, '0.85'}
+    # v9 guides pipeline — A8 submission_grader
+    SQS_ATTEMPT_REPROCESS_URL: ${env:SQS_ATTEMPT_REPROCESS_URL, ''}
+    S3_SUBMISSIONS_BUCKET: ${env:S3_SUBMISSIONS_BUCKET, ''}
+    SSM_GUIDES_GRADING_PAUSED_PARAM: ${env:SSM_GUIDES_GRADING_PAUSED_PARAM, '/innova/guides/grading_paused'}
+    SSM_GUIDES_CHEAP_MODE_PARAM: ${env:SSM_GUIDES_CHEAP_MODE_PARAM, '/innova/guides/grading_cheap_mode'}
+    GRADING_MIN_TRANSCRIPTION_CONFIDENCE: ${env:GRADING_MIN_TRANSCRIPTION_CONFIDENCE, '0.5'}
 
 custom:
   customDomain:
@@ -116,5 +135,49 @@ functions:
     events:
       - sqs:
           arn: ${env:SQS_OCR_QUEUE_ARN}
+          batchSize: 5
+          functionResponseType: ReportBatchItemFailures
+
+  guideIngest:
+    image:
+      name: ai-engine-image
+      command:
+        - src.pipeline.guide_ingest_worker.handler
+    # Generous: chunked Sonnet PDF extraction + pypdfium2 figure rendering.
+    timeout: 600
+    memorySize: 2048
+    events:
+      - sqs:
+          arn: ${env:SQS_GUIDE_INGEST_ARN}
+          # One guide per invocation — each is a heavy multi-call PDF job.
+          batchSize: 1
+          functionResponseType: ReportBatchItemFailures
+
+  solutionGenerator:
+    image:
+      name: ai-engine-image
+      command:
+        - src.pipeline.solution_generator.handler
+    # One Sonnet call per question (text-only) + topic classification.
+    timeout: 600
+    memorySize: 1024
+    events:
+      - sqs:
+          arn: ${env:SQS_SOLUTION_GEN_ARN}
+          # One guide per invocation — each fans out to per-question LLM calls.
+          batchSize: 1
+          functionResponseType: ReportBatchItemFailures
+
+  submissionGrader:
+    image:
+      name: ai-engine-image
+      command:
+        - src.pipeline.submission_grader.handler
+    # One Haiku vision call per submission (photos + cached pauta), up to 5 per batch.
+    timeout: 120
+    memorySize: 512
+    events:
+      - sqs:
+          arn: ${env:SQS_SUBMISSION_GRADE_ARN}
           batchSize: 5
           functionResponseType: ReportBatchItemFailures

@@ -26,7 +26,7 @@ async def _main(event: dict[str, object], context: object) -> dict[str, object]:
         return {"processed": 0}
 
     settings = get_settings()
-    s3_client = boto3.client("s3", region_name=settings.aws_region)
+    s3_client = boto3.client("s3", region_name=settings.app_aws_region)
     orchestrator = OcrOrchestrator()
     processed = 0
 

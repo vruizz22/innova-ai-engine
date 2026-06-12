@@ -1,7 +1,12 @@
 # CLAUDE.md — innova-ai-engine
 
 > Repo-specific instructions for Claude Code. Inherits all rules from `~/.claude/CLAUDE.md`.
+> **Plan vigente:** ver `../docs/MASTER_PLAN_v9.md` y `./docs/PLAN_v9_ADDENDUM.md` (v7/v8 quedan como referencia histórica). Pipeline de guías: `../.github/instructions/06c-guide-pipeline.md`.
 > Stack: Python 3.11 + uv + Pydantic v2 + Anthropic SDK + Google Generative AI + scipy + numpy + AWS Lambda.
+
+## [0] REGLA OPERATIVA — install-by-user (CRÍTICA)
+
+WSL2 colapsa. El agente **NO ejecuta**: `uv sync/add`, `serverless deploy`, builds Docker, suites pytest completas con `--cov`. Los entrega en bloque ` ```bash ` para que Victor los corra. **Sí ejecuta**: `Read`/`grep`/`git`, edición de archivos, `uv run pytest path/to/test.py::test_x` (tests cortos targeted), `ruff check`, `pyright file.py`.
 
 ---
 
@@ -9,11 +14,14 @@
 
 This repo houses all **ML/AI compute workers** for Innova EdTech:
 
-1. **BKT Calibrator** (`src/bkt/`) — nightly brute-force grid search over `(p_L0, p_T, p_S, p_G)` per skill.
-2. **IRT Calibrator** (`src/irt/`) — nightly `scipy` 2PL maximum-likelihood fit of `(a, b)` per item.
+1. **BKT Calibrator** (`src/bkt/`) — nightly brute-force grid search over `(p_L0, p_T, p_S, p_G)` per topic (v7: rename de "skill" a "topic", alineado con backend §4).
+2. **IRT Calibrator** (`src/irt/`) — nightly `scipy` 2PL MLE de `(a, b)` per exercise.
 3. **LLM Error Classifier** (`src/llm_classifier/`) — Anthropic Claude Haiku 4.5, batch 20 attempts, prompt caching, tool_use forced.
 4. **OCR Vision Worker** (`src/ocr/`) — Gemini 2.0 Flash Vision (primary) + Claude Vision fallback via `MathOCRPort`.
-5. **Lambda handlers** (`src/pipeline/`) — independently deployable, SQS/S3/EventBridge triggers.
+5. **Alert Generator** (`src/pipeline/hourly_alerts.py`) — **NUEVO M11** — EventBridge cron horario, detecta `AT_RISK_STUDENT | COMMON_ERROR_IN_TOPIC | STUDENT_DROP | UNIT_OFF_TRACK`, escribe `TeacherAlert`.
+6. **OCR feedback loop** — **NUEVO M11** — `ocr_worker.py` debe publicar a SQS `attempt-reprocess-queue` con `latex_steps` para que el backend re-dispatche al Rule Engine. Cerrar este loop es prerequisito del piloto.
+7. **Curriculum loader** (`scripts/curriculum_loader.py`) — **NUEVO M10** — parsea `3ero.txt..6to.txt` → JSON estructurado consumido por seeds Prisma del backend.
+8. **Lambda handlers** (`src/pipeline/`) — independently deployable, SQS/S3/EventBridge triggers.
 
 ---
 
@@ -96,11 +104,12 @@ Path: `src/ocr/`
 
 Path: `src/pipeline/`
 
-- `nightly_bkt.py`: EventBridge cron trigger `cron(0 7 * * ? *)`. Loads all skills, loads attempt history from Postgres, runs BKT grid search per skill, writes params back.
-- `nightly_irt.py`: EventBridge cron `cron(15 7 * * ? *)`. Loads items with ≥50 attempts, runs IRT fit per item, writes `(a, b)` back.
-- `llm_consumer.py`: SQS Standard trigger, `BatchSize=20, MaximumBatchingWindowInSeconds=60`. Deserializes messages, calls `batch.py`, handles partial batch failures.
-- `ocr_worker.py`: S3 event trigger on `uploads/` prefix. Downloads image, calls `orchestrator.py`, posts structured result to `innova-backend-serverless` via API or directly to Postgres.
-- All handlers: extract `trace_id` from SQS `MessageAttributes` or generate new UUID. Propagate to all child calls via `structlog.contextvars.bind_contextvars(trace_id=...)`.
+- `nightly_bkt.py`: EventBridge cron `cron(0 7 * * ? *)`. Loads all topics, loads attempt history from Postgres, runs BKT grid search per topic, writes params back to `Topic.bkt_*` (v7: rename skill→topic).
+- `nightly_irt.py`: EventBridge cron `cron(15 7 * * ? *)`. Loads exercises with ≥50 attempts, runs IRT fit, writes `(a, b)` back to `Exercise.irt_a, irt_b`.
+- `hourly_alerts.py` (**M11**): EventBridge cron `cron(0 * * * ? *)`. Lee `StudentTopicMastery` join `Enrollment` join `Course`. Genera alertas con dedup `(teacher_id, alert_type, topic_id, student_id, day)`. Escribe `TeacherAlert`.
+- `llm_consumer.py`: SQS Standard trigger, `BatchSize=20, MaximumBatchingWindowInSeconds=60`. Deserializa, llama a `batch.py`, maneja partial batch failures.
+- `ocr_worker.py`: S3 event trigger sobre prefix `uploads/`. Descarga imagen, llama a `orchestrator.py`, **publica a SQS `attempt-reprocess-queue`** con `{attempt_id, latex_steps[], provider, confidence}` (M11 — cierre del loop). NO actualiza Postgres directamente.
+- All handlers: extraer `trace_id` desde SQS `MessageAttributes` o generar UUID. Propagar via `structlog.contextvars.bind_contextvars(trace_id=...)`.
 - Handler signature: `def handler(event: dict[str, object], context: object) -> dict[str, object]`.
 
 ---
@@ -137,13 +146,15 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     anthropic_api_key: str
     gemini_api_key: str
-    database_url: str
+    database_url: str            # v7: apunta a Supabase Postgres post-M12
     mongodb_uri: str
+    app_aws_region: str = "us-east-1"   # v7 rename (AWS_REGION es reservado en Lambda)
     log_level: str = "info"
     ocr_confidence_threshold: float = 0.7
     llm_batch_size: int = 20
     ssm_llm_paused_param: str = "/innova/llm/paused"
     ssm_ocr_paused_param: str = "/innova/ocr/paused"
+    sqs_attempt_reprocess_url: str       # v7: cierre OCR loop
 
     model_config = SettingsConfigDict(env_file=".env")
 ```
@@ -168,6 +179,8 @@ See `docs/prompt/02-innova-ai-engine-testing.md` for full test spec.
 
 ## [13] What NOT to do
 
+- No ejecutar `uv sync/add`, `serverless deploy`, `pytest --cov` desde el agente — ver §[0].
+- No usar `AWS_REGION` como env var (reservado en Lambda) — usar `APP_AWS_REGION`.
 - No `scikit-learn`, no `torch`, no `tensorflow` in production runtime.
 - No Modal.com in MVP (ADR-002 in `docs/architecture.md`).
 - No `Any` in type hints without `# type: ignore[assignment]` + justification comment.

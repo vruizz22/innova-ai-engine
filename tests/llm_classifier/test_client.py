@@ -4,7 +4,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.llm_classifier.catalog import DomainCatalog
 from src.llm_classifier.schemas import Attempt
+
+
+def _fract_catalog() -> DomainCatalog:
+    return DomainCatalog(
+        domain_id="dom-fract",
+        domain_code="FRACT",
+        domain_name="Fractions",
+        error_codes=["FRACT_MUL_CROSS_MULTIPLIES_G6"],
+        taxonomy_text=(
+            "[ERROR CATALOG -- domain: Fractions]\n"
+            "- FRACT_MUL_CROSS_MULTIPLIES_G6: cross multiplies"
+        ),
+        catalog_hash="abc123def456",
+    )
 
 
 def _build_mock_tool_response(
@@ -101,5 +116,51 @@ def test_killswitch_drops_to_dlq() -> None:
 
             with pytest.raises(PausedError):
                 classify_batch(attempts=_build_attempts(20), trace_id="test")
+
+            mock_anthropic.return_value.messages.create.assert_not_called()
+
+
+def test_classify_batch_for_domain_uses_domain_prompt_and_scoped_enum() -> None:
+    """v8 by-domain path: domain-specialized cached prompt + tool enum limited to the
+    domain catalog (+ specials)."""
+    with patch("src.llm_classifier.client.Anthropic") as mock_anthropic:
+        mock_client = MagicMock()
+        mock_anthropic.return_value = mock_client
+        mock_client.messages.create.return_value = _build_mock_tool_response(
+            error_type="FRACT_MUL_CROSS_MULTIPLIES_G6", n=1
+        )
+
+        from src.llm_classifier.client import classify_batch_for_domain
+
+        with patch("src.llm_classifier.client.get_ssm_param", return_value="false"):
+            results = classify_batch_for_domain(
+                _build_attempts(1), _fract_catalog(), trace_id="t"
+            )
+
+        kw = mock_client.messages.create.call_args.kwargs
+        system_block = kw["system"][0]
+        assert system_block["cache_control"] == {"type": "ephemeral"}
+        assert "Fractions" in system_block["text"]
+        assert "FRACT_MUL_CROSS_MULTIPLIES_G6" in system_block["text"]
+        assert kw["tool_choice"] == {"type": "tool", "name": "classify_errors"}
+
+        enum_vals = kw["tools"][0]["input_schema"]["properties"]["classifications"][
+            "items"
+        ]["properties"]["error_type"]["enum"]
+        assert "FRACT_MUL_CROSS_MULTIPLIES_G6" in enum_vals
+        assert "CORRECT" in enum_vals
+        assert "BORROW_OMITTED_TENS" not in enum_vals
+        assert len(results) == 1
+
+
+def test_classify_batch_for_domain_killswitch() -> None:
+    with patch("src.llm_classifier.client.get_ssm_param", return_value="true"):
+        with patch("src.llm_classifier.client.Anthropic") as mock_anthropic:
+            from src.llm_classifier.client import PausedError, classify_batch_for_domain
+
+            with pytest.raises(PausedError):
+                classify_batch_for_domain(
+                    _build_attempts(1), _fract_catalog(), trace_id="t"
+                )
 
             mock_anthropic.return_value.messages.create.assert_not_called()
