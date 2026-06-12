@@ -43,6 +43,6 @@ jobs:
           LLM_BATCH_SIZE: ${{ secrets.LLM_BATCH_SIZE || '20' }}
           SSM_LLM_PAUSED_PARAM: ${{ secrets.SSM_LLM_PAUSED_PARAM || '/innova/llm/paused' }}
           SSM_OCR_PAUSED_PARAM: ${{ secrets.SSM_OCR_PAUSED_PARAM || '/innova/ocr/paused' }}
-          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          APP_AWS_REGION: ${{ secrets.APP_AWS_REGION || 'us-east-1' }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'info' }}
         run: serverless deploy --stage prod

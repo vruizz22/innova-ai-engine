@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pydantic import BaseModel
+
 # version: 1.0
 SYSTEM_PROMPT = """\
 You are an expert math education assessor specialized in detecting procedural errors \
@@ -81,3 +83,109 @@ Problem: 100 - 47 | Student steps: incoherent  Student answer: "0"
 """
 
 CACHED_BLOCK = SYSTEM_PROMPT + "\n\n" + ERROR_TAXONOMY + "\n\n" + FEW_SHOTS
+
+
+# =====================================================================
+# v8 — by-domain prompts (ADR A4.1 / ADR-114)
+#
+# One specialized, cacheable system prompt per domain. The error catalog itself is
+# NOT hardcoded here: it is injected at runtime from the DB (`catalog.taxonomy_text`)
+# so the prompt always reflects the ACTIVE error_tags. We keep a registry (instead of
+# 18 near-identical files) because the only per-domain difference is the specialization
+# header — the catalog is data, not code. Caching still happens per domain because the
+# assembled system block is unique per domain_code + catalog_hash.
+# =====================================================================
+
+# version: 2.0
+
+
+class DomainPromptSpec(BaseModel):
+    code: str
+    title: str
+    grade_range: str
+
+
+# Keyed by Domain.code (matches the 17 domains seeded in the backend).
+DOMAIN_SPECS: dict[str, DomainPromptSpec] = {
+    "ARITH": DomainPromptSpec(
+        code="ARITH", title="Arithmetic with natural numbers", grade_range="G1-G6"
+    ),
+    "INT": DomainPromptSpec(
+        code="INT", title="Integers (signed numbers)", grade_range="G7-G8"
+    ),
+    "FRACT": DomainPromptSpec(code="FRACT", title="Fractions", grade_range="G4-G8"),
+    "DEC": DomainPromptSpec(code="DEC", title="Decimal numbers", grade_range="G5-G8"),
+    "RATIO": DomainPromptSpec(
+        code="RATIO",
+        title="Ratios, proportions and percentages",
+        grade_range="G6-G8",
+    ),
+    "ALGEBRA": DomainPromptSpec(
+        code="ALGEBRA",
+        title="Algebra (expressions, equations, systems)",
+        grade_range="G7-G12",
+    ),
+    "POW": DomainPromptSpec(
+        code="POW", title="Powers and roots", grade_range="G8-G10"
+    ),
+    "FUNC": DomainPromptSpec(code="FUNC", title="Functions", grade_range="G8-G12"),
+    "GEOM": DomainPromptSpec(
+        code="GEOM", title="Plane geometry", grade_range="G3-G10"
+    ),
+    "GEOM3D": DomainPromptSpec(
+        code="GEOM3D", title="3D geometry, area and volume", grade_range="G5-G12"
+    ),
+    "TRIG": DomainPromptSpec(
+        code="TRIG", title="Trigonometry", grade_range="G10-G12"
+    ),
+    "STAT": DomainPromptSpec(
+        code="STAT", title="Statistics", grade_range="G4-G12"
+    ),
+    "DATA": DomainPromptSpec(
+        code="DATA", title="Data handling and probability", grade_range="G1-G8"
+    ),
+    "LOG": DomainPromptSpec(
+        code="LOG", title="Logic and sets", grade_range="G7-G12"
+    ),
+    "SEQ": DomainPromptSpec(
+        code="SEQ", title="Sequences and patterns", grade_range="G7-G12"
+    ),
+    "COORD": DomainPromptSpec(
+        code="COORD", title="Coordinate geometry", grade_range="G6-G12"
+    ),
+    "TRANSV": DomainPromptSpec(
+        code="TRANSV",
+        title="Transversal (cross-cutting) procedural errors",
+        grade_range="G1-G12",
+    ),
+}
+
+_DOMAIN_PROMPT_TEMPLATE = """\
+You are an expert math education assessor specialized in {title} \
+({grade_range}, Chilean MINEDUC curriculum).
+
+Your task: given a student's step-by-step solution AND the canonical solution, \
+identify the FIRST procedural error using ONLY the controlled error catalog below.
+
+You MUST use the `classify_errors` tool to return your classification. Never reply \
+in plain text. Process each attempt in the batch independently.
+
+Special values:
+- CORRECT: the student's answer matches the canonical solution.
+- UNCLASSIFIED: no catalog error fits (use it rather than forcing a wrong code).
+- TRANSVERSAL_LIKELY: the error is real but cross-cutting (not specific to this \
+domain, e.g. careless transcription, sign handling, units) -- defer to a second pass.
+
+{taxonomy}\
+"""
+
+
+def build_domain_system_prompt(
+        spec: DomainPromptSpec,
+        taxonomy_text: str) -> str:
+    """Assemble the cacheable system block for one domain with its ACTIVE catalog."""
+    return _DOMAIN_PROMPT_TEMPLATE.format(
+        title=spec.title,
+        grade_range=spec.grade_range,
+        taxonomy=taxonomy_text,
+    )
