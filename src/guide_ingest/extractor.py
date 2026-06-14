@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import base64
+from typing import cast
 
 import structlog
 from anthropic import AsyncAnthropic
+from anthropic.types import MessageParam
 
 from src.guide_ingest.prompts import (
     EXTRACT_GUIDE_SYSTEM,
@@ -11,6 +13,7 @@ from src.guide_ingest.prompts import (
     build_extract_user_text,
 )
 from src.guide_ingest.schemas import ExtractGuideResult
+from src.observability.cost import TokenUsage, usage_from_response
 from src.shared.killswitch import ensure_not_paused
 from src.shared.settings import get_settings
 
@@ -36,7 +39,7 @@ class SonnetExtractor:
             *,
             grade_level: int,
             page_count: int,
-            trace_id: str = "") -> ExtractGuideResult:
+            trace_id: str = "") -> tuple[ExtractGuideResult, TokenUsage]:
         ensure_not_paused(self._paused_param, trace_id=trace_id)
         encoded = base64.standard_b64encode(pdf_chunk).decode("ascii")
         user_content: list[dict[str, object]] = [
@@ -63,10 +66,13 @@ class SonnetExtractor:
             ],
             tools=[EXTRACT_GUIDE_TOOL],  # type: ignore[arg-type]
             tool_choice={"type": "tool", "name": "extract_guide"},
-            # type: ignore[arg-type]
-            messages=[{"role": "user", "content": user_content}],
+            messages=cast(
+                list[MessageParam],
+                [{"role": "user", "content": user_content}],
+            ),
         )
 
+        usage = usage_from_response(response.usage)
         for block in response.content:
             if block.type == "tool_use" and block.name == "extract_guide":
                 result = ExtractGuideResult.model_validate(block.input)
@@ -76,7 +82,7 @@ class SonnetExtractor:
                     page_count=page_count,
                     trace_id=trace_id,
                 )
-                return result
+                return result, usage
 
         raise RuntimeError(
             "extractor returned no extract_guide tool_use block (forced tool_choice)"

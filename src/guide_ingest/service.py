@@ -20,6 +20,8 @@ from src.guide_ingest.schemas import (
     SolutionGenMessage,
 )
 from src.guide_ingest.tex import render_guide_tex
+from src.observability.cost import TokenUsage, cost_usd
+from src.observability.metrics import M_INGEST_COST_USD, UNIT_NONE, emit_metrics
 from src.shared.settings import Settings
 
 logger = structlog.get_logger()
@@ -85,14 +87,16 @@ async def ingest_guide(
         settings.guide_ingest_chunk_overlap,
     )
     chunk_results: list[ExtractGuideResult] = []
+    total_usage = TokenUsage()
     for start, end in ranges:
         chunk_bytes = pdf.slice_pages(pdf_bytes, start, end)
-        result = await extractor.extract_chunk(
+        result, usage = await extractor.extract_chunk(
             chunk_bytes,
             grade_level=message.course_grade_level,
             page_count=end - start,
             trace_id=trace_id,
         )
+        total_usage += usage
         chunk_results.append(offset_pages(result, start))
 
     questions = merge_chunks(chunk_results)
@@ -134,6 +138,11 @@ async def ingest_guide(
         "guide_ingested",
         guide_id=message.guide_id,
         questions=len(questions),
+        trace_id=trace_id,
+    )
+    emit_metrics(
+        [(M_INGEST_COST_USD, cost_usd(total_usage, _EXTRACTION_MODEL), UNIT_NONE)],
+        guide_id=message.guide_id,
         trace_id=trace_id,
     )
     return IngestOutcome(

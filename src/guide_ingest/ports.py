@@ -8,6 +8,7 @@ from src.guide_ingest.schemas import (
     MergedQuestion,
     PrecheckResult,
 )
+from src.observability.cost import TokenUsage
 
 
 @runtime_checkable
@@ -19,7 +20,8 @@ class PdfPrecheckPort(Protocol):
 
 @runtime_checkable
 class GuideExtractorPort(Protocol):
-    """Sonnet 4.6 extraction of one PDF chunk into structured questions."""
+    """Sonnet 4.6 extraction of one PDF chunk into structured questions, plus the call's
+    token usage so the service can accumulate the per-guide cost (A9.4)."""
 
     async def extract_chunk(
         self,
@@ -27,7 +29,7 @@ class GuideExtractorPort(Protocol):
         *,
         grade_level: int,
         page_count: int,
-        trace_id: str = "") -> ExtractGuideResult: ...
+        trace_id: str = "") -> tuple[ExtractGuideResult, TokenUsage]: ...
 
 
 @runtime_checkable
