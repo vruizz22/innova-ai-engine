@@ -1,0 +1,605 @@
+# Instincts generated from https://github.com/vruizz22/innova-ai-engine
+# Generated: 2026-06-25T04:52:01.570Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: innova-ai-engine-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, chore
+
+## Evidence
+
+- 12 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat(alerts): add schemas module with alert types and Pydantic models, chore(deploy/ci): wire v9 guide queues, fix py3.11 lint and add deploy docs
+
+---
+id: innova-ai-engine-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Commit Length
+
+## Action
+
+Write moderate-length commit messages (~70 characters)
+
+## Evidence
+
+- Average commit message length: 70 chars
+- Based on 12 commits
+
+---
+id: innova-ai-engine-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: innova-ai-engine-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: innova-ai-engine-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: innova-ai-engine-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: innova-ai-engine-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: innova-ai-engine-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~30x per month
+- Files: **/*.test.*
+
+---
+id: innova-ai-engine-workflow-add-new-module-with-clean-architecture
+trigger: "when doing add new module with clean architecture"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Workflow Add New Module With Clean Architecture
+
+## Action
+
+Follow the add-new-module-with-clean-architecture workflow:
+1. Create __init__.py and schemas.py for the new module.
+2. Add core logic files: domain.py (if needed), service.py, repository.py, ports.py, prompts.py (if LLM involved).
+3. Add pipeline worker file if needed (src/pipeline/...).
+4. Write corresponding test files in tests/<module>/.
+5. Update or add shared settings or wiring if necessary.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: src/<module>/__init__.py, src/<module>/schemas.py, src/<module>/domain.py
+
+---
+id: innova-ai-engine-workflow-extend-existing-module-with-feature-and-tests
+trigger: "when doing extend existing module with feature and tests"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Workflow Extend Existing Module With Feature And Tests
+
+## Action
+
+Follow the extend-existing-module-with-feature-and-tests workflow:
+1. Update or add logic files (e.g., detectors.py, service.py, repository.py, prompts.py, tools.py).
+2. Update or add schemas if needed.
+3. Add or update tests for new functionality.
+4. Wire up new pipeline worker if needed.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: src/<module>/detectors.py, src/<module>/service.py, src/<module>/repository.py
+
+---
+id: innova-ai-engine-workflow-add-or-update-pipeline-worker-and-tests
+trigger: "when doing add or update pipeline worker and tests"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Workflow Add Or Update Pipeline Worker And Tests
+
+## Action
+
+Follow the add-or-update-pipeline-worker-and-tests workflow:
+1. Create or update src/pipeline/<worker>.py.
+2. Wire up any required service, repository, or domain logic.
+3. Add or update tests in tests/pipeline/ or relevant module test directories.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: src/pipeline/<worker>.py, src/<module>/service.py, src/<module>/repository.py
+
+---
+id: innova-ai-engine-workflow-llm-classifier-or-prompts-feature-addition
+trigger: "when doing llm classifier or prompts feature addition"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Workflow Llm Classifier Or Prompts Feature Addition
+
+## Action
+
+Follow the llm-classifier-or-prompts-feature-addition workflow:
+1. Update or add src/llm_classifier/<feature>.py (e.g., suggest.py, prompts.py, tools.py, schemas.py, client.py).
+2. Update or add pipeline consumer if needed.
+3. Add or update tests in tests/llm_classifier/ and tests/pipeline/.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: src/llm_classifier/suggest.py, src/llm_classifier/prompts.py, src/llm_classifier/tools.py
+
+---
+id: innova-ai-engine-workflow-add-or-update-observability-metrics-and-tests
+trigger: "when doing add or update observability metrics and tests"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Workflow Add Or Update Observability Metrics And Tests
+
+## Action
+
+Follow the add-or-update-observability-metrics-and-tests workflow:
+1. Create or update src/observability/cost.py and/or src/observability/metrics.py.
+2. Add or update tests in tests/observability/.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: src/observability/cost.py, src/observability/metrics.py, tests/observability/test_cost.py
+
+---
+id: innova-ai-engine-instinct-file-naming
+trigger: "When creating a new Python file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct File Naming
+
+## Action
+
+Name the file using snake_case
+
+## Evidence
+
+- Pattern in src/alerts/schemas.py
+- Pattern in src/llm_classifier/prompts.py
+
+---
+id: innova-ai-engine-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Naming conventions specified in analysis
+
+---
+id: innova-ai-engine-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Naming conventions specified in analysis
+
+---
+id: innova-ai-engine-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Constant Naming
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Naming conventions specified in analysis
+
+---
+id: innova-ai-engine-instinct-import-style
+trigger: "When importing modules within the package"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Import Style
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- Import style specified as relative in analysis
+
+---
+id: innova-ai-engine-instinct-export-style
+trigger: "When exporting functions or classes from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Export style specified as named in analysis
+
+---
+id: innova-ai-engine-instinct-test-location
+trigger: "When adding tests for a module"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Test Location
+
+## Action
+
+Place test files in the separate 'tests' directory, mirroring the module structure
+
+## Evidence
+
+- Pattern in tests/<module>/test_*.py
+- Folder structure analysis
+
+---
+id: innova-ai-engine-instinct-test-naming
+trigger: "When naming a test file"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Test Naming
+
+## Action
+
+Use the pattern test_*.py for Python test files
+
+## Evidence
+
+- Pattern in tests/<module>/test_*.py
+
+---
+id: innova-ai-engine-instinct-unit-test-type
+trigger: "When writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Unit Test Type
+
+## Action
+
+Write unit tests
+
+## Evidence
+
+- Test types specified as unit in analysis
+
+---
+id: innova-ai-engine-instinct-git-commit-format
+trigger: "When making a git commit"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Git Commit Format
+
+## Action
+
+Use conventional commit format with prefixes like 'feat' or 'chore' and a scope in parentheses
+
+## Evidence
+
+- Seen in commit: feat(alerts): add schemas module with alert types and Pydantic models
+- Seen in commit: chore(deploy/ci): wire v9 guide queues, fix py3.11 lint and add deploy docs
+
+---
+id: innova-ai-engine-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, around 70 characters on average
+
+## Evidence
+
+- Average commit length is 70 characters
+
+---
+id: innova-ai-engine-instinct-add-new-module
+trigger: "When introducing a new domain feature or worker"
+confidence: 0.97
+domain: workflow
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Add New Module
+
+## Action
+
+Create a new module with __init__.py, schemas.py, domain.py (if needed), service.py, repository.py, ports.py, prompts.py (if LLM involved), pipeline worker, and corresponding tests
+
+## Evidence
+
+- Workflow: add-new-module-with-clean-architecture
+- Example files: src/<module>/schemas.py, src/<module>/service.py, tests/<module>/test_*.py
+
+---
+id: innova-ai-engine-instinct-extend-existing-module
+trigger: "When adding a new feature, detector, or capability to an existing module"
+confidence: 0.93
+domain: workflow
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Extend Existing Module
+
+## Action
+
+Update or add logic files (detectors.py, service.py, repository.py, prompts.py, tools.py), update schemas if needed, add or update tests, and wire up new pipeline worker if needed
+
+## Evidence
+
+- Workflow: extend-existing-module-with-feature-and-tests
+- Example files: src/<module>/detectors.py, tests/<module>/test_*.py
+
+---
+id: innova-ai-engine-instinct-add-update-pipeline-worker
+trigger: "When introducing or updating a pipeline worker"
+confidence: 0.88
+domain: workflow
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Add Update Pipeline Worker
+
+## Action
+
+Create or update src/pipeline/<worker>.py, wire up required service/repository/domain logic, and add or update tests
+
+## Evidence
+
+- Workflow: add-or-update-pipeline-worker-and-tests
+- Example files: src/pipeline/<worker>.py, tests/pipeline/test_*.py
+
+---
+id: innova-ai-engine-instinct-llm-classifier-feature
+trigger: "When expanding LLM-based classification, suggestion, or prompt tooling"
+confidence: 0.87
+domain: workflow
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Llm Classifier Feature
+
+## Action
+
+Update or add src/llm_classifier/<feature>.py, update or add pipeline consumer if needed, and add or update tests
+
+## Evidence
+
+- Workflow: llm-classifier-or-prompts-feature-addition
+- Example files: src/llm_classifier/prompts.py, tests/llm_classifier/test_*.py
+
+---
+id: innova-ai-engine-instinct-observability-metrics
+trigger: "When adding or improving observability (cost accounting, metrics)"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: vruizz22/innova-ai-engine
+---
+
+# Innova Ai Engine Instinct Observability Metrics
+
+## Action
+
+Create or update src/observability/cost.py and/or src/observability/metrics.py, and add or update tests in tests/observability/
+
+## Evidence
+
+- Workflow: add-or-update-observability-metrics-and-tests
+- Example files: src/observability/metrics.py, tests/observability/test_metrics.py
+
