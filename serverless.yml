@@ -203,3 +203,18 @@ functions:
           arn: ${env:SQS_SUBMISSION_GRADE_ARN}
           batchSize: 5
           functionResponseType: ReportBatchItemFailures
+
+  exerciseGenerator:
+    image:
+      name: ai-engine-image
+      command:
+        - src.pipeline.exercise_generator.handler
+    # On-demand teacher request: one Haiku tool-call producing up to 10 exercises,
+    # then per-exercise Postgres writes. Queue owned by the backend stack.
+    timeout: 300
+    memorySize: 512
+    events:
+      - sqs:
+          arn: ${env:SQS_EXERCISE_GENERATE_ARN}
+          batchSize: 1
+          functionResponseType: ReportBatchItemFailures

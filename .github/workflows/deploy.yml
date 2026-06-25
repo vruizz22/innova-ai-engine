@@ -51,6 +51,10 @@ jobs:
           SQS_GUIDE_INGEST_ARN: ${{ secrets.SQS_GUIDE_INGEST_ARN }}
           SQS_SOLUTION_GEN_ARN: ${{ secrets.SQS_SOLUTION_GEN_ARN }}
           SQS_SUBMISSION_GRADE_ARN: ${{ secrets.SQS_SUBMISSION_GRADE_ARN }}
+          # On-demand exercise generation queue (owned by backend stack). Set this
+          # secret from the backend CloudFormation output ExerciseGenerateQueueArn
+          # AFTER the backend deploys, or the SQS event source fails resolution.
+          SQS_EXERCISE_GENERATE_ARN: ${{ secrets.SQS_EXERCISE_GENERATE_ARN }}
           # Runtime queue URLs / buckets the workers publish to (env-block
           # defaults to '' in serverless.yml, but set them so the pipeline works).
           SQS_SOLUTION_GEN_URL: ${{ secrets.SQS_SOLUTION_GEN_URL || '' }}
