@@ -3,7 +3,11 @@ from __future__ import annotations
 from contextlib import AbstractAsyncContextManager
 from typing import Protocol
 
+import structlog
+
 from src.guide_ingest.schemas import MergedQuestion
+
+logger = structlog.get_logger()
 
 
 class WriterConn(Protocol):
@@ -48,6 +52,14 @@ UPDATE guides
  WHERE id = $1
 """
 
+_SAVE_COST = """
+INSERT INTO cost_events
+       (id, worker, model, input_tokens, output_tokens,
+        cache_creation_input_tokens, cache_read_input_tokens,
+        cost_usd, trace_id, created_at)
+VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8, NOW())
+"""
+
 
 class AsyncpgGuideRepository:
     """`GuideRepositoryPort` against `guides` / `guide_questions` (CLAUDE.md §10, async)."""
@@ -59,12 +71,8 @@ class AsyncpgGuideRepository:
         await self._conn.execute(_MARK_EXTRACTING, guide_id)
 
     async def mark_failed(
-            self,
-            guide_id: str,
-            *,
-            source_kind: str,
-            pages: int | None,
-            reason: str) -> None:
+        self, guide_id: str, *, source_kind: str, pages: int | None, reason: str
+    ) -> None:
         await self._conn.execute(_MARK_FAILED, guide_id, source_kind, pages, reason)
 
     async def complete(
@@ -100,3 +108,30 @@ class AsyncpgGuideRepository:
                 extraction_model,
                 len(questions),
             )
+
+    async def save_cost_event(
+        self,
+        *,
+        worker: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cache_creation_input_tokens: int,
+        cache_read_input_tokens: int,
+        cost_usd: float,
+        trace_id: str,
+    ) -> None:
+        try:
+            await self._conn.execute(
+                _SAVE_COST,
+                worker,
+                model,
+                input_tokens,
+                output_tokens,
+                cache_creation_input_tokens,
+                cache_read_input_tokens,
+                cost_usd,
+                trace_id,
+            )
+        except Exception as exc:
+            logger.warning("cost_event_write_failed", error=str(exc), worker=worker)

@@ -33,14 +33,10 @@ def test_offset_pages_shifts_and_is_pure() -> None:
             ExtractedQuestion(
                 statement_latex="x",
                 statement_text="x",
-                figure_bboxes=[
-                    FigureBBox(
-                        page=0,
-                        x0=0.1,
-                        y0=0.1,
-                        x1=0.2,
-                        y1=0.2)],
-            )])
+                figure_bboxes=[FigureBBox(page=0, x0=0.1, y0=0.1, x1=0.2, y1=0.2)],
+            )
+        ]
+    )
     shifted = offset_pages(result, 19)
     assert shifted.questions[0].figure_bboxes[0].page == 19
     # original is untouched

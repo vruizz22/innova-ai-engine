@@ -13,6 +13,11 @@ You grade ONE handwritten student answer to a math question. You receive 1-3 pho
 the student's work, plus (in the system context) the official solution (pauta) and the
 domain's error catalog. Return everything via the `transcribe_and_align` tool.
 
+IMPORTANT — full-page scans: if the photo shows multiple exercises or problems, focus
+exclusively on the exercise identified by its label in the grading instruction. Transcribe
+and align ONLY the student's work for that specific exercise; do not include steps from
+other exercises in `transcription.steps` or `alignment.matches`.
+
 Do THREE things:
 1. transcription: transcribe the student's steps as LaTeX. For each step set `idx`
    (0-based), `latex`, and `legible=false` when you cannot read it confidently. Give an
@@ -91,9 +96,8 @@ TRANSCRIBE_AND_ALIGN_TOOL: dict[str, Any] = {
 
 
 def build_pauta_block(
-        solution_steps_json: str,
-        solution_final_answer: str,
-        domain_catalog_text: str) -> str:
+    solution_steps_json: str, solution_final_answer: str, domain_catalog_text: str
+) -> str:
     """Per-question cached block (system, ephemeral): official solution + error catalog.
     The catalog extract anchors Haiku's 4096-token cacheable minimum (ADR v9 A8.1)."""
     return (
@@ -109,7 +113,14 @@ def build_pauta_block(
 
 def build_grade_user_text(grade_level: int, question_label: str | None) -> str:
     """Per-submission user instruction (not cached). No PII — only grade + label."""
-    label = f" Question label: {question_label}." if question_label else ""
+    if question_label:
+        label = (
+            f" This is question '{question_label}'."
+            f" If the photo shows multiple exercises, transcribe and align"
+            f" ONLY the work for question '{question_label}' — ignore all other exercises."
+        )
+    else:
+        label = ""
     return (
         f"Grade level: {grade_level}.{label} "
         "Transcribe, align and grade the attached photos via transcribe_and_align."

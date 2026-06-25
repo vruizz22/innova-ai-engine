@@ -25,29 +25,33 @@ source, status, applicable_grades[], diagnostic_hint?, remediation?, references[
 
 ## Cobertura (K-12 matemática, MINEDUC FG)
 
-> **Pase 1 (breadth-complete): 253 entries validadas** — 17/17 dominios, grados 1–12.
-> Validadas contra el schema Zod del importador (0 inválidas, 0 duplicados).
-> Pases siguientes = profundidad (más variantes por subdominio) hasta acercarse al objetivo ≥2540.
+> **Estado actual: 2607 entries validadas** — 17/17 dominios, grados 1–12. **Objetivo ≥2540 superado.**
+> Validadas con `out/catalog/validate_catalog.py` (0 inválidas, 0 duplicados, 2607 codes únicos).
+> Deep-fill completo: cada dominio se llevó al/por sobre su target de `docs/error-taxonomy/README.md §3`,
+> mediante diff de los IDs estables de los docs `docs/error-taxonomy/NN-*.md` contra el catálogo +
+> revisión del deployed por subdominio (se añaden solo conceptos genuinamente nuevos para evitar
+> duplicado semántico; el plan tiene un paso posterior de dedup por embeddings).
 
-| Archivo | Dominio | Grados | Entries | Estado |
+| Archivo | Dominio | Grados | Entries | Target |
 |---|---|---|---|---|
-| `01-arith.jsonl` | ARITH | 1–6 | 46 | ✅ pase 1 |
-| `02-int.jsonl` | INT | 7–8 | 16 | ✅ pase 1 |
-| `03-fract.jsonl` | FRACT | 4–8 | 18 | ✅ pase 1 |
-| `04-dec.jsonl` | DEC | 5–8 | 15 | ✅ pase 1 |
-| `05-ratio.jsonl` | RATIO | 6–10 | 13 | ✅ pase 1 |
-| `06-algebra.jsonl` | ALGEBRA | 7–12 | 26 | ✅ pase 1 |
-| `07-pow.jsonl` | POW | 8–12 | 14 | ✅ pase 1 |
-| `08-func.jsonl` | FUNC | 9–12 | 17 | ✅ pase 1 |
-| `09-geom.jsonl` | GEOM | 3–10 | 18 | ✅ pase 1 |
-| `10-geom3d.jsonl` | GEOM3D | 6–11 | 9 | ✅ pase 1 |
-| `11-trig.jsonl` | TRIG | 9–12 | 10 | ✅ pase 1 |
-| `12-stat.jsonl` | STAT | 5–12 | 11 | ✅ pase 1 |
-| `13-data.jsonl` | DATA | 3–8 | 8 | ✅ pase 1 |
-| `14-log.jsonl` | LOG | 11–12 | 8 | ✅ pase 1 |
-| `15-seq.jsonl` | SEQ | 6–10 | 7 | ✅ pase 1 |
-| `16-coord.jsonl` | COORD | 5–12 | 8 | ✅ pase 1 |
-| `17-transv.jsonl` | TRANSV | todos | 9 | ✅ pase 1 |
+| `01-arith.jsonl` | ARITH | 1–6 | 286 | 280 |
+| `02-int.jsonl` | INT | 7–8 | 139 | 120 |
+| `03-fract.jsonl` | FRACT | 4–8 | 196 | 180 |
+| `04-dec.jsonl` | DEC | 5–8 | 194 | 140 |
+| `05-ratio.jsonl` | RATIO | 6–10 | 112 | 110 |
+| `06-algebra.jsonl` | ALGEBRA | 7–12 | 380 | 380 |
+| `07-pow.jsonl` | POW | 8–12 | 160 | 160 |
+| `08-func.jsonl` | FUNC | 9–12 | 180 | 180 |
+| `09-geom.jsonl` | GEOM | 3–10 | 170 | 170 |
+| `10-geom3d.jsonl` | GEOM3D | 6–11 | 110 | 110 |
+| `11-trig.jsonl` | TRIG | 9–12 | 130 | 130 |
+| `12-stat.jsonl` | STAT | 5–12 | 130 | 130 |
+| `13-data.jsonl` | DATA | 3–8 | 70 | 70 |
+| `14-log.jsonl` | LOG | 11–12 | 80 | 80 |
+| `15-seq.jsonl` | SEQ | 6–10 | 90 | 90 |
+| `16-coord.jsonl` | COORD | 5–12 | 100 | 100 |
+| `17-transv.jsonl` | TRANSV | todos | 80 | 80 |
+| **TOTAL** | | | **2607** | **2540** |
 
 Validar localmente en cualquier momento:
 ```bash

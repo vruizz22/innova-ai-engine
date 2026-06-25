@@ -37,9 +37,11 @@ class SolutionRepositoryPort(Protocol):
         single question (re-generation). Returns None if the guide does not exist."""
         ...
 
-    async def fetch_topic_candidates(
-        self, subject_id: str, grade_min: int, grade_max: int
-    ) -> list[TopicCandidate]: ...
+    async def fetch_taxonomy_candidates(self, grade_level: int) -> list[TopicCandidate]:
+        """Classification candidates from the error taxonomy (domain/subdomain). Always
+        populated, so a question resolves to a real domain even when no curriculum topic
+        was seeded for its grade (v9.1, supersedes the topics-table lookup)."""
+        ...
 
     async def fetch_active_error_codes(self, domain_id: str) -> set[str]: ...
 

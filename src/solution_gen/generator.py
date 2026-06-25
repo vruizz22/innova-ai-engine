@@ -45,9 +45,7 @@ class SonnetSolutionGenerator:
         trace_id: str = "",
     ) -> GeneratedSolution:
         ensure_not_paused(self._paused_param, trace_id=trace_id)
-        user_text = build_generate_user_text(
-            question, mode, topic_candidates, grade_level
-        )
+        user_text = build_generate_user_text(question, mode, topic_candidates, grade_level)
         response = await self._client.messages.create(
             model=_MODEL,
             max_tokens=_MAX_TOKENS,

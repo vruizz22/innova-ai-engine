@@ -23,9 +23,7 @@ def _question_block(question: MergedQuestion) -> str:
         graphic = f"\\\\\\includegraphics[width=0.6\\textwidth]{{figures/{name}}}"
         lines.append(f"  {graphic}")
     if question.provided_answer:
-        lines.append(
-            f"  \\\\\\textbf{{Respuesta:}} {
-                question.provided_answer}")
+        lines.append(f"  \\\\\\textbf{{Respuesta:}} {question.provided_answer}")
     return "\n".join(lines)
 
 

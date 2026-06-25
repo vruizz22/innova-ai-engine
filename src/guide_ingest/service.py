@@ -20,6 +20,8 @@ from src.guide_ingest.schemas import (
     SolutionGenMessage,
 )
 from src.guide_ingest.tex import render_guide_tex
+from src.observability.cost import TokenUsage, cost_usd
+from src.observability.metrics import M_INGEST_COST_USD, UNIT_NONE, emit_metrics
 from src.shared.settings import Settings
 
 logger = structlog.get_logger()
@@ -30,10 +32,7 @@ _EXTRACTION_MODEL = "claude-sonnet-4-6"
 def _failure_reason(precheck: PrecheckResult) -> str:
     if precheck.notes:
         return precheck.notes
-    return (
-        f"PDF quality {precheck.quality:.2f} below threshold — "
-        "rescan at 300dpi and re-upload."
-    )
+    return f"PDF quality {precheck.quality:.2f} below threshold — rescan at 300dpi and re-upload."
 
 
 async def ingest_guide(
@@ -85,14 +84,16 @@ async def ingest_guide(
         settings.guide_ingest_chunk_overlap,
     )
     chunk_results: list[ExtractGuideResult] = []
+    total_usage = TokenUsage()
     for start, end in ranges:
         chunk_bytes = pdf.slice_pages(pdf_bytes, start, end)
-        result = await extractor.extract_chunk(
+        result, usage = await extractor.extract_chunk(
             chunk_bytes,
             grade_level=message.course_grade_level,
             page_count=end - start,
             trace_id=trace_id,
         )
+        total_usage += usage
         chunk_results.append(offset_pages(result, start))
 
     questions = merge_chunks(chunk_results)
@@ -124,9 +125,8 @@ async def ingest_guide(
     publisher.publish(
         settings.sqs_solution_gen_url,
         SolutionGenMessage(
-            guide_id=message.guide_id,
-            guide_question_id=None,
-            trace_id=trace_id).model_dump_json(),
+            guide_id=message.guide_id, guide_question_id=None, trace_id=trace_id
+        ).model_dump_json(),
         trace_id=trace_id,
     )
 
@@ -134,6 +134,22 @@ async def ingest_guide(
         "guide_ingested",
         guide_id=message.guide_id,
         questions=len(questions),
+        trace_id=trace_id,
+    )
+    ingest_cost = cost_usd(total_usage, _EXTRACTION_MODEL)
+    emit_metrics(
+        [(M_INGEST_COST_USD, ingest_cost, UNIT_NONE)],
+        guide_id=message.guide_id,
+        trace_id=trace_id,
+    )
+    await repo.save_cost_event(
+        worker="guide_ingest",
+        model=_EXTRACTION_MODEL,
+        input_tokens=total_usage.input_tokens,
+        output_tokens=total_usage.output_tokens,
+        cache_creation_input_tokens=total_usage.cache_creation_input_tokens,
+        cache_read_input_tokens=total_usage.cache_read_input_tokens,
+        cost_usd=ingest_cost,
         trace_id=trace_id,
     )
     return IngestOutcome(

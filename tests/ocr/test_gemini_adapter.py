@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.ocr.schemas import OcrProvider, OcrResult
+
+# Minimal valid 1x1 JPEG. The smoke test needs *decodable* image bytes: Gemini
+# rejects arbitrary bytes (e.g. b"fake_image") with 400 INVALID_ARGUMENT before
+# it ever reaches the model, so a fake payload can never exercise the live path.
+_TINY_JPEG = base64.b64decode(
+    "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRof"
+    "Hh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAAB"
+    "AAAAAAAAAAAAAAAAAAAAAv/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AfwD/2Q=="
+)
 
 
 def _build_gemini_response(latex_steps: list[str], confidence: float) -> MagicMock:
@@ -28,9 +38,11 @@ def test_gemini_adapter_returns_valid_schema() -> None:
     with patch("google.genai.Client") as mock_cls:
         mock_instance = MagicMock()
         mock_cls.return_value = mock_instance
-        mock_instance.models.generate_content.return_value = _build_gemini_response(
-            latex_steps=["345", "345-178", "167"],
-            confidence=0.92,
+        mock_instance.aio.models.generate_content = AsyncMock(
+            return_value=_build_gemini_response(
+                latex_steps=["345", "345-178", "167"],
+                confidence=0.92,
+            )
         )
         from src.ocr.gemini_adapter import GeminiAdapter
 
@@ -53,6 +65,6 @@ def test_gemini_live_smoke() -> None:
     from src.ocr.gemini_adapter import GeminiAdapter
 
     adapter = GeminiAdapter()
-    result = asyncio.run(adapter.extract(image_bytes=b"fake_image", trace_id="smoke"))
+    result = asyncio.run(adapter.extract(image_bytes=_TINY_JPEG, trace_id="smoke"))
     assert isinstance(result, OcrResult)
     assert result.overall_confidence >= 0.0

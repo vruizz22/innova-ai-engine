@@ -22,8 +22,7 @@ def is_paused(param_name: str) -> bool:
         settings = get_settings()
         # type: ignore[misc]
         ssm = boto3.client("ssm", region_name=settings.app_aws_region)
-        resp: dict[str, object] = ssm.get_parameter(
-            Name=param_name)  # type: ignore[misc]
+        resp: dict[str, object] = ssm.get_parameter(Name=param_name)  # type: ignore[misc]
         param = cast(dict[str, object], resp["Parameter"])
         return str(param["Value"]).lower() == "true"
     except Exception:
@@ -33,8 +32,5 @@ def is_paused(param_name: str) -> bool:
 def ensure_not_paused(param_name: str, *, trace_id: str = "") -> None:
     """Raise `PausedError` when the killswitch is active (call before each paid API call)."""
     if is_paused(param_name):
-        logger.warning(
-            "killswitch_active",
-            param=param_name,
-            trace_id=trace_id)
+        logger.warning("killswitch_active", param=param_name, trace_id=trace_id)
         raise PausedError(f"paused by killswitch {param_name}")

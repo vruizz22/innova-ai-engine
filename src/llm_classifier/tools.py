@@ -79,14 +79,9 @@ def build_classify_tool(error_codes: Sequence[str]) -> dict[str, Any]:
                     "items": {
                         "type": "object",
                         "properties": {
-                            "attempt_id": {
-                                "type": "string"},
-                            "error_type": {
-                                "type": "string",
-                                "enum": enum_values},
-                            "evidence": {
-                                "type": "string",
-                                "maxLength": 300},
+                            "attempt_id": {"type": "string"},
+                            "error_type": {"type": "string", "enum": enum_values},
+                            "evidence": {"type": "string", "maxLength": 300},
                             "confidence": {
                                 "type": "number",
                                 "minimum": 0.0,
@@ -100,7 +95,8 @@ def build_classify_tool(error_codes: Sequence[str]) -> dict[str, Any]:
                             "confidence",
                         ],
                     },
-                }},
+                }
+            },
             "required": ["classifications"],
         },
     }

@@ -24,13 +24,10 @@ def _build_attempt_body(domain_id: str | None = None) -> str:
 
 def _record(domain_id: str | None) -> dict[str, object]:
     return {
-        "messageId": str(
-            uuid4()),
+        "messageId": str(uuid4()),
         "body": _build_attempt_body(domain_id),
         "messageAttributes": {
-            "trace_id": {
-                "stringValue": "test-trace-001",
-                "dataType": "String"},
+            "trace_id": {"stringValue": "test-trace-001", "dataType": "String"},
         },
     }
 
@@ -139,9 +136,7 @@ def test_llm_consumer_falls_back_to_generic_when_no_catalog() -> None:
 
     event = {"Records": [_record("dom-empty")]}
 
-    def _generic(
-        attempts: list[Attempt], trace_id: str = ""
-    ) -> list[AttemptClassification]:
+    def _generic(attempts: list[Attempt], trace_id: str = "") -> list[AttemptClassification]:
         return [
             AttemptClassification(
                 attempt_id=a.id, error_type="UNCLASSIFIED", evidence="x", confidence=0.0
@@ -155,15 +150,85 @@ def test_llm_consumer_falls_back_to_generic_when_no_catalog() -> None:
     with patch("src.pipeline.llm_consumer.get_domain_catalog", new=AsyncMock(return_value=None)):
         with patch("src.pipeline.llm_consumer.classify_batch_for_domain", new=by_domain):
             with patch("src.pipeline.llm_consumer.classify_batch", new=generic):
-                mock_pool = _make_mock_pool()
-                with patch("src.pipeline.llm_consumer.get_pool", return_value=mock_pool):
-                    from src.pipeline.llm_consumer import handler
+                # Patch suggest so we don't trigger an LLM call in the second pass.
+                with patch("src.pipeline.llm_consumer.suggest_new_error_types", return_value=[]):
+                    mock_pool = _make_mock_pool()
+                    with patch("src.pipeline.llm_consumer.get_pool", return_value=mock_pool):
+                        from src.pipeline.llm_consumer import handler
 
-                    result = handler(event, MagicMock())
+                        result = handler(event, MagicMock())
 
     assert result["processed"] == 1
     by_domain.assert_not_called()
     generic.assert_called_once()
+
+
+def test_unclassified_triggers_suggest_and_upsert() -> None:
+    """UNCLASSIFIED attempts must trigger the suggest second-pass, which upserts a new
+    error_tag and re-runs the UPDATE so the attempt gets a tag_id."""
+    from src.llm_classifier.schemas import Attempt, AttemptClassification
+    from src.llm_classifier.suggest import SuggestedTag
+
+    dom_id = "dom-A"
+    event = {"Records": [_record(dom_id)]}
+    attempt_id = json.loads(event["Records"][0]["body"])["id"]
+
+    def _generic(attempts: list[Attempt], trace_id: str = "") -> list[AttemptClassification]:
+        return [
+            AttemptClassification(
+                attempt_id=a.id, error_type="UNCLASSIFIED", evidence="x", confidence=0.0
+            )
+            for a in attempts
+        ]
+
+    suggested = SuggestedTag(
+        attempt_id=attempt_id,
+        code="NEW_ERR_CODE",
+        name="Nuevo error",
+        description="El alumno cometió un error no catalogado.",
+        confidence=0.75,
+        severity="MED",
+    )
+    fetchrow_result = {"id": "tag-uuid-001"}
+
+    mock_conn = AsyncMock()
+    mock_conn.execute = AsyncMock()
+    mock_conn.fetchrow = AsyncMock(return_value=fetchrow_result)
+
+    tx_cm = MagicMock()
+    tx_cm.__aenter__ = AsyncMock(return_value=None)
+    tx_cm.__aexit__ = AsyncMock(return_value=None)
+    mock_conn.transaction = MagicMock(return_value=tx_cm)
+
+    mock_pool = MagicMock()
+
+    @asynccontextmanager  # type: ignore[arg-type]
+    async def _acquire() -> object:  # type: ignore[misc]
+        yield mock_conn
+
+    mock_pool.acquire = _acquire
+
+    with patch("src.pipeline.llm_consumer.get_domain_catalog", new=AsyncMock(return_value=None)):
+        with patch("src.pipeline.llm_consumer.classify_batch_for_domain", new=MagicMock()):
+            with patch("src.pipeline.llm_consumer.classify_batch", side_effect=_generic):
+                with patch(
+                    "src.pipeline.llm_consumer.suggest_new_error_types",
+                    return_value=[suggested],
+                ) as mock_suggest:
+                    with patch("src.pipeline.llm_consumer.clear_catalog_cache") as mock_clear:
+                        with patch("src.pipeline.llm_consumer.get_pool", return_value=mock_pool):
+                            from src.pipeline.llm_consumer import handler
+
+                            result = handler(event, MagicMock())
+
+    assert result["processed"] == 1
+    mock_suggest.assert_called_once()
+    # fetchrow must be called to upsert the new tag
+    mock_conn.fetchrow.assert_called_once()
+    # cache must be invalidated after new tag is inserted
+    mock_clear.assert_called_once()
+    # execute must be called at least twice: primary UPDATE + suggest UPDATE
+    assert mock_conn.execute.call_count >= 2
 
 
 def test_trace_id_propagated_from_sqs_attributes() -> None:
