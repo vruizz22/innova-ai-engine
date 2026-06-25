@@ -27,14 +27,17 @@ class GeminiAdapter:
     def __init__(self) -> None:
         settings = get_settings()
         self._client = genai.Client(api_key=settings.gemini_api_key)  # type: ignore[attr-defined]
+        self._model = settings.gemini_model
 
     async def extract(self, image_bytes: bytes, trace_id: str = "") -> OcrResult:
-        response = self._client.models.generate_content(  # type: ignore[attr-defined]
-            model="gemini-2.0-flash",
+        # Async SDK call (`.aio`): no sync HTTP inside an async port (CLAUDE.md §13).
+        response = await self._client.aio.models.generate_content(  # type: ignore[attr-defined]
+            model=self._model,
             contents=[
                 OCR_PROMPT,
-                genai_types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                # type: ignore[attr-defined]
+                genai_types.Part.from_bytes(  # type: ignore[attr-defined]
+                    data=image_bytes, mime_type="image/jpeg"
+                ),
             ],
         )
         try:
