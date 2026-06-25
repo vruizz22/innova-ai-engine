@@ -5,7 +5,11 @@ from pydantic import BaseModel, Field
 
 class Attempt(BaseModel):
     id: str
-    topic: str
+    # v9.1: after the taxonomy migration a guide question routes by domain_id +
+    # subdomain_code; `topic` is only the (now optional) teacher-confirmed Topic
+    # code, which is null for K-12 questions the teacher hasn't pinned to a Topic.
+    # The backend sends `topic: null` for those, so accept None instead of raising.
+    topic: str | None = None
     problem_statement: str
     canonical_solution: str
     raw_steps: list[object]

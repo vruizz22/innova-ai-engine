@@ -28,8 +28,23 @@ def test_error_taxonomy_has_mvp_types() -> None:
 
 def test_domain_specs_cover_17_seeded_domains() -> None:
     expected = {
-        "ARITH", "INT", "FRACT", "DEC", "RATIO", "ALGEBRA", "POW", "FUNC",
-        "GEOM", "GEOM3D", "TRIG", "STAT", "DATA", "LOG", "SEQ", "COORD", "TRANSV",
+        "ARITH",
+        "INT",
+        "FRACT",
+        "DEC",
+        "RATIO",
+        "ALGEBRA",
+        "POW",
+        "FUNC",
+        "GEOM",
+        "GEOM3D",
+        "TRIG",
+        "STAT",
+        "DATA",
+        "LOG",
+        "SEQ",
+        "COORD",
+        "TRANSV",
     }
     assert set(DOMAIN_SPECS) == expected
     assert all(spec.code == code for code, spec in DOMAIN_SPECS.items())

@@ -13,8 +13,7 @@ logger = structlog.get_logger()
 # Special error_type values valid for every domain, independent of the catalog.
 # TRANSVERSAL_LIKELY lets the model defer cross-cutting (non-domain) errors to a
 # second pass against the TRANSV domain (ADR A4.4).
-SPECIAL_ERROR_TYPES: tuple[str, ...] = (
-    "CORRECT", "UNCLASSIFIED", "TRANSVERSAL_LIKELY")
+SPECIAL_ERROR_TYPES: tuple[str, ...] = ("CORRECT", "UNCLASSIFIED", "TRANSVERSAL_LIKELY")
 
 # The catalog only changes on a deploy (DRAFT->ACTIVE flip + codegen), so the 1h
 # in-process window from ADR A4.2 is safe. Keyed by domain_id (the UUID the backend
@@ -39,9 +38,7 @@ SELECT d.code            AS domain_code,
 class Fetcher(Protocol):
     """Structural type for the asyncpg connection bits we use (untyped upstream)."""
 
-    async def fetch(
-        self, query: str, *args: object
-    ) -> Sequence[Mapping[str, object]]: ...
+    async def fetch(self, query: str, *args: object) -> Sequence[Mapping[str, object]]: ...
 
 
 class DomainCatalog(BaseModel):
@@ -65,8 +62,7 @@ def _hash_codes(codes: Sequence[str]) -> str:
     return hashlib.sha256(joined).hexdigest()[:12]
 
 
-def _build_taxonomy_text(
-        domain_name: str, rows: Sequence[Mapping[str, object]]) -> str:
+def _build_taxonomy_text(domain_name: str, rows: Sequence[Mapping[str, object]]) -> str:
     lines = [
         f"[ERROR CATALOG -- domain: {domain_name}. Use ONLY these error_type codes.]",
         "",
@@ -82,9 +78,7 @@ def _build_taxonomy_text(
     return "\n".join(lines)
 
 
-async def fetch_domain_catalog(
-    conn: Fetcher, domain_id: str
-) -> DomainCatalog | None:
+async def fetch_domain_catalog(conn: Fetcher, domain_id: str) -> DomainCatalog | None:
     """Query the ACTIVE catalog for one domain. Returns None when the domain has no
     ACTIVE error tags (or domain_id is unknown) so the caller can fall back."""
     rows = await conn.fetch(_CATALOG_SQL, domain_id)

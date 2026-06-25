@@ -52,7 +52,9 @@ def _user_payload(attempts: list[Attempt]) -> str:
         [
             {
                 "attempt_id": a.id,
-                "topic": a.topic,
+                # topic is optional post-taxonomy migration; fall back to the
+                # subdomain code so the prompt always has a meaningful label.
+                "topic": a.topic or a.subdomain_code or "",
                 "subdomain": a.subdomain_code,
                 "problem": a.problem_statement,
                 "canonical": a.canonical_solution,
@@ -102,16 +104,12 @@ def _invoke(
     )
 
 
-def classify_batch(
-        attempts: list[Attempt],
-        trace_id: str = "") -> list[AttemptClassification]:
+def classify_batch(attempts: list[Attempt], trace_id: str = "") -> list[AttemptClassification]:
     """v7 generic classifier (full taxonomy in one cached prompt). Kept as the
     fallback for attempts without a resolvable domain. Raises PausedError if the
     SSM killswitch is active."""
     _ensure_not_paused(trace_id)
-    user = f"Classify these {
-        len(attempts)} attempts:\n{
-        _user_payload(attempts)}"
+    user = f"Classify these {len(attempts)} attempts:\n{_user_payload(attempts)}"
     return _invoke(CACHED_BLOCK, CLASSIFY_TOOL, user)
 
 
@@ -130,16 +128,13 @@ def classify_batch_for_domain(
     if spec is None:
         # Unknown domain code -> safety net on the generic v7 prompt.
         logger.warning("unknown_domain_code", domain_code=catalog.domain_code)
-        user = f"Classify these {
-            len(attempts)} attempts:\n{
-            _user_payload(attempts)}"
+        user = f"Classify these {len(attempts)} attempts:\n{_user_payload(attempts)}"
         return _invoke(CACHED_BLOCK, CLASSIFY_TOOL, user)
 
     system_text = build_domain_system_prompt(spec, catalog.taxonomy_text)
     tool = build_classify_tool(catalog.error_codes)
     user = (
-        f"Classify these {len(attempts)} {catalog.domain_code} attempts:\n"
-        f"{_user_payload(attempts)}"
+        f"Classify these {len(attempts)} {catalog.domain_code} attempts:\n{_user_payload(attempts)}"
     )
     logger.info(
         "llm_domain_batch",
