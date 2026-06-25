@@ -17,7 +17,7 @@ This repo houses all **ML/AI compute workers** for Innova EdTech:
 1. **BKT Calibrator** (`src/bkt/`) — nightly brute-force grid search over `(p_L0, p_T, p_S, p_G)` per topic (v7: rename de "skill" a "topic", alineado con backend §4).
 2. **IRT Calibrator** (`src/irt/`) — nightly `scipy` 2PL MLE de `(a, b)` per exercise.
 3. **LLM Error Classifier** (`src/llm_classifier/`) — Anthropic Claude Haiku 4.5, batch 20 attempts, prompt caching, tool_use forced.
-4. **OCR Vision Worker** (`src/ocr/`) — Gemini 2.0 Flash Vision (primary) + Claude Vision fallback via `MathOCRPort`.
+4. **OCR Vision Worker** (`src/ocr/`) — Gemini Flash Vision (primary, modelo via `GEMINI_MODEL`; default `gemini-2.5-flash` — el 2.0 Flash se apagó 2026-06-01) + Claude Vision fallback via `MathOCRPort`.
 5. **Alert Generator** (`src/pipeline/hourly_alerts.py`) — **NUEVO M11** — EventBridge cron horario, detecta `AT_RISK_STUDENT | COMMON_ERROR_IN_TOPIC | STUDENT_DROP | UNIT_OFF_TRACK`, escribe `TeacherAlert`.
 6. **OCR feedback loop** — **NUEVO M11** — `ocr_worker.py` debe publicar a SQS `attempt-reprocess-queue` con `latex_steps` para que el backend re-dispatche al Rule Engine. Cerrar este loop es prerequisito del piloto.
 7. **Curriculum loader** (`scripts/curriculum_loader.py`) — **NUEVO M10** — parsea `3ero.txt..6to.txt` → JSON estructurado consumido por seeds Prisma del backend.
@@ -91,7 +91,7 @@ Path: `src/llm_classifier/`
 Path: `src/ocr/`
 
 - `ports.py`: defines `MathOCRPort` — a `Protocol` class with `async def extract(image_bytes: bytes, trace_id: str) -> OcrResult`.
-- `gemini_adapter.py`: implements `MathOCRPort` using `google-generativeai`. Model: `gemini-2.0-flash`. Prompt instructs extraction of math steps as structured JSON.
+- `gemini_adapter.py`: implements `MathOCRPort` using `google-generativeai`. Model: `settings.gemini_model` (env `GEMINI_MODEL`, default `gemini-2.5-flash`; `gemini-2.0-flash` fue dado de baja 2026-06-01). Prompt instructs extraction of math steps as structured JSON.
 - `claude_adapter.py`: implements `MathOCRPort` using Anthropic Vision. Fallback only.
 - `orchestrator.py`: calls Gemini → if `overall_confidence < 0.7`, escalate to Claude fallback. Returns `OcrResult` with `latex_steps: list[str]`, `overall_confidence: float`, `provider: str`.
 - **Cost killswitch**: check SSM Parameter `/innova/ocr/paused` before every API call.

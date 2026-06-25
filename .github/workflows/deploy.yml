@@ -3,15 +3,20 @@ name: Deploy Lambdas
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -22,7 +27,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -39,6 +44,19 @@ jobs:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           SQS_LLM_CLASSIFY_ARN: ${{ secrets.SQS_LLM_CLASSIFY_ARN }}
           SQS_OCR_QUEUE_ARN: ${{ secrets.SQS_OCR_QUEUE_ARN }}
+          # v9 guides pipeline — these queues/buckets are OWNED by the backend
+          # stack. Deploy innova-backend-serverless FIRST, then copy the ARNs
+          # from its CloudFormation outputs into these secrets. Required (no
+          # default): the SQS event sources fail variable resolution if empty.
+          SQS_GUIDE_INGEST_ARN: ${{ secrets.SQS_GUIDE_INGEST_ARN }}
+          SQS_SOLUTION_GEN_ARN: ${{ secrets.SQS_SOLUTION_GEN_ARN }}
+          SQS_SUBMISSION_GRADE_ARN: ${{ secrets.SQS_SUBMISSION_GRADE_ARN }}
+          # Runtime queue URLs / buckets the workers publish to (env-block
+          # defaults to '' in serverless.yml, but set them so the pipeline works).
+          SQS_SOLUTION_GEN_URL: ${{ secrets.SQS_SOLUTION_GEN_URL || '' }}
+          SQS_ATTEMPT_REPROCESS_URL: ${{ secrets.SQS_ATTEMPT_REPROCESS_URL || '' }}
+          S3_GUIDES_BUCKET: ${{ secrets.S3_GUIDES_BUCKET || '' }}
+          S3_SUBMISSIONS_BUCKET: ${{ secrets.S3_SUBMISSIONS_BUCKET || '' }}
           OCR_CONFIDENCE_THRESHOLD: ${{ secrets.OCR_CONFIDENCE_THRESHOLD || '0.7' }}
           LLM_BATCH_SIZE: ${{ secrets.LLM_BATCH_SIZE || '20' }}
           SSM_LLM_PAUSED_PARAM: ${{ secrets.SSM_LLM_PAUSED_PARAM || '/innova/llm/paused' }}
