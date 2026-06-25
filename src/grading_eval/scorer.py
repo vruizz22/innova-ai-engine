@@ -3,10 +3,7 @@ from __future__ import annotations
 from src.grading_eval.schemas import GradingEvalCase, GradingEvalReport
 
 
-def load_cases(
-        jsonl_text: str,
-        *,
-        prompt_version: str = "") -> list[GradingEvalCase]:
+def load_cases(jsonl_text: str, *, prompt_version: str = "") -> list[GradingEvalCase]:
     """Parse JSONL (one case per line) into cases, optionally filtering to one
     prompt_version. Pure (text in, cases out) so the CLI's file read stays a thin shell
     and the parsing is unit-testable."""
@@ -48,11 +45,9 @@ def score_grading(cases: list[GradingEvalCase], *, prompt_version: str = "") -> 
     Pure: no I/O, so it is unit-testable with synthetic cases (the CLI handles files)."""
     n_cases = len(cases)
     scored = [c for c in cases if not c.illegible]
-    checkpoint_cases = [
-        c for c in scored if c.gold_first_error_checkpoint is not None]
+    checkpoint_cases = [c for c in scored if c.gold_first_error_checkpoint is not None]
 
-    is_correct_hits = [1.0 if c.gold_is_correct ==
-                       c.pred_is_correct else 0.0 for c in scored]
+    is_correct_hits = [1.0 if c.gold_is_correct == c.pred_is_correct else 0.0 for c in scored]
     score_errors = [abs(c.gold_score - c.pred_score) for c in scored]
     checkpoint_hits = [
         1.0 if c.gold_first_error_checkpoint == c.pred_first_error_checkpoint else 0.0

@@ -15,9 +15,7 @@ from src.alerts.schemas import (
 class DbConn(Protocol):
     """The asyncpg connection bits we use (untyped upstream — adapt at the handler)."""
 
-    async def fetch(
-        self, query: str, *args: object
-    ) -> Sequence[Mapping[str, object]]: ...
+    async def fetch(self, query: str, *args: object) -> Sequence[Mapping[str, object]]: ...
 
     async def fetchval(self, query: str, *args: object) -> object: ...
 

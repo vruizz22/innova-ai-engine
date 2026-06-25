@@ -57,8 +57,7 @@ def detect_at_risk_students(
 ) -> list[AlertCandidate]:
     """One AT_RISK_STUDENT alert per student with >= `min_topics` topics below the
     mastery floor in a course (dedup key: student)."""
-    by_student: dict[tuple[str, str, str],
-                     list[MasteryRow]] = defaultdict(list)
+    by_student: dict[tuple[str, str, str], list[MasteryRow]] = defaultdict(list)
     for row in rows:
         by_student[(row.course_id, row.teacher_id, row.student_id)].append(row)
 
@@ -96,16 +95,12 @@ def detect_common_error_in_topic(
 ) -> list[AlertCandidate]:
     """COMMON_ERROR_IN_TOPIC when a large fraction of a course is below the mastery
     floor on the same topic (dedup key: topic)."""
-    by_topic: dict[tuple[str, str, str, str],
-                   list[MasteryRow]] = defaultdict(list)
+    by_topic: dict[tuple[str, str, str, str], list[MasteryRow]] = defaultdict(list)
     for row in rows:
-        by_topic[
-            (row.course_id, row.teacher_id, row.topic_id, row.topic_code)
-        ].append(row)
+        by_topic[(row.course_id, row.teacher_id, row.topic_id, row.topic_code)].append(row)
 
     candidates: list[AlertCandidate] = []
-    for (course_id, teacher_id, topic_id,
-         topic_code), topic_rows in by_topic.items():
+    for (course_id, teacher_id, topic_id, topic_code), topic_rows in by_topic.items():
         size = sizes.get(course_id, 0)
         if size <= 0:
             continue
@@ -134,9 +129,7 @@ def detect_common_error_in_topic(
     return candidates
 
 
-def detect_student_drop(
-    rows: list[MasteryRow], *, drop_threshold: float
-) -> list[AlertCandidate]:
+def detect_student_drop(rows: list[MasteryRow], *, drop_threshold: float) -> list[AlertCandidate]:
     """STUDENT_DROP when a student's 7-day trend on some topic falls at/below the
     (negative) threshold (dedup key: student)."""
     # Filter out None trends first so the grouped values are plain floats
@@ -147,8 +140,7 @@ def detect_student_drop(
     by_student: dict[tuple[str, str, str], list[tuple[float, MasteryRow]]]
     by_student = defaultdict(list)
     for trend, row in pairs:
-        by_student[(row.course_id, row.teacher_id, row.student_id)
-                   ].append((trend, row))
+        by_student[(row.course_id, row.teacher_id, row.student_id)].append((trend, row))
 
     candidates: list[AlertCandidate] = []
     for (course_id, teacher_id, student_id), trend_rows in by_student.items():
@@ -176,16 +168,12 @@ def detect_student_drop(
     return candidates
 
 
-def detect_unit_off_track(
-    rows: list[MasteryRow], *, pknown_floor: float
-) -> list[AlertCandidate]:
+def detect_unit_off_track(rows: list[MasteryRow], *, pknown_floor: float) -> list[AlertCandidate]:
     """UNIT_OFF_TRACK when a course's average mastery across a unit's topics is below
     the floor (dedup key: unit; stored in payload since teacher_alerts has no unit FK)."""
     by_unit: dict[tuple[str, str, str, str], list[float]] = defaultdict(list)
     for row in rows:
-        by_unit[
-            (row.course_id, row.teacher_id, row.unit_id, row.unit_code)
-        ].append(row.p_known)
+        by_unit[(row.course_id, row.teacher_id, row.unit_id, row.unit_code)].append(row.p_known)
 
     candidates: list[AlertCandidate] = []
     for (course_id, teacher_id, unit_id, unit_code), pknowns in by_unit.items():
