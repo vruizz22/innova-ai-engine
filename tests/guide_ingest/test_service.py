@@ -14,6 +14,7 @@ from src.guide_ingest.schemas import (
     PrecheckResult,
 )
 from src.guide_ingest.service import ingest_guide
+from src.observability.cost import TokenUsage
 from src.shared.killswitch import PausedError
 from src.shared.settings import Settings
 
@@ -46,21 +47,13 @@ class _FakePrecheck:
         self._result = result
         self.calls = 0
 
-    async def precheck(
-            self,
-            pdf_bytes: bytes,
-            *,
-            trace_id: str = "") -> PrecheckResult:
+    async def precheck(self, pdf_bytes: bytes, *, trace_id: str = "") -> PrecheckResult:
         self.calls += 1
         return self._result
 
 
 class _RaisingPrecheck:
-    async def precheck(
-            self,
-            pdf_bytes: bytes,
-            *,
-            trace_id: str = "") -> PrecheckResult:
+    async def precheck(self, pdf_bytes: bytes, *, trace_id: str = "") -> PrecheckResult:
         raise PausedError("paused")
 
 
@@ -70,15 +63,11 @@ class _FakeExtractor:
         self.calls = 0
 
     async def extract_chunk(
-            self,
-            pdf_chunk: bytes,
-            *,
-            grade_level: int,
-            page_count: int,
-            trace_id: str = "") -> ExtractGuideResult:
+        self, pdf_chunk: bytes, *, grade_level: int, page_count: int, trace_id: str = ""
+    ) -> tuple[ExtractGuideResult, TokenUsage]:
         result = self._results[self.calls]
         self.calls += 1
-        return result
+        return result, TokenUsage(input_tokens=100, output_tokens=50)
 
 
 class _FakePdf:
@@ -114,12 +103,7 @@ class _FakePublisher:
     def __init__(self) -> None:
         self.published: list[tuple[str, str, str]] = []
 
-    def publish(
-            self,
-            queue_url: str,
-            body: str,
-            *,
-            trace_id: str = "") -> None:
+    def publish(self, queue_url: str, body: str, *, trace_id: str = "") -> None:
         self.published.append((queue_url, body, trace_id))
 
 
@@ -133,12 +117,8 @@ class _FakeRepo:
         self.extracting.append(guide_id)
 
     async def mark_failed(
-            self,
-            guide_id: str,
-            *,
-            source_kind: str,
-            pages: int | None,
-            reason: str) -> None:
+        self, guide_id: str, *, source_kind: str, pages: int | None, reason: str
+    ) -> None:
         self.failed.append((guide_id, reason))
 
     async def complete(
@@ -154,6 +134,9 @@ class _FakeRepo:
     ) -> None:
         self.completed.append((guide_id, questions))
 
+    async def save_cost_event(self, **kwargs: object) -> None:
+        pass
+
 
 def test_happy_path_extracts_persists_and_enqueues() -> None:
     precheck = _FakePrecheck(PrecheckResult(kind=PdfKind.DIGITAL, quality=0.9))
@@ -165,9 +148,7 @@ def test_happy_path_extracts_persists_and_enqueues() -> None:
                         label="1",
                         statement_latex="$1+1$",
                         statement_text="one plus one",
-                        figure_bboxes=[
-                            FigureBBox(page=0, x0=0.1, y0=0.1, x1=0.2, y1=0.2)
-                        ],
+                        figure_bboxes=[FigureBBox(page=0, x0=0.1, y0=0.1, x1=0.2, y1=0.2)],
                     ),
                     ExtractedQuestion(
                         label="2",
@@ -218,10 +199,8 @@ def test_happy_path_extracts_persists_and_enqueues() -> None:
 
 def test_precheck_failure_terminates_before_extraction() -> None:
     precheck = _FakePrecheck(
-        PrecheckResult(
-            kind=PdfKind.SCANNED,
-            quality=0.2,
-            notes="rescan pages 3-5"))
+        PrecheckResult(kind=PdfKind.SCANNED, quality=0.2, notes="rescan pages 3-5")
+    )
     extractor = _FakeExtractor([])
     pdf = _FakePdf(3)
     store = _FakeStore()

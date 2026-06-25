@@ -32,10 +32,7 @@ _EXTRACTION_MODEL = "claude-sonnet-4-6"
 def _failure_reason(precheck: PrecheckResult) -> str:
     if precheck.notes:
         return precheck.notes
-    return (
-        f"PDF quality {precheck.quality:.2f} below threshold — "
-        "rescan at 300dpi and re-upload."
-    )
+    return f"PDF quality {precheck.quality:.2f} below threshold — rescan at 300dpi and re-upload."
 
 
 async def ingest_guide(
@@ -128,9 +125,8 @@ async def ingest_guide(
     publisher.publish(
         settings.sqs_solution_gen_url,
         SolutionGenMessage(
-            guide_id=message.guide_id,
-            guide_question_id=None,
-            trace_id=trace_id).model_dump_json(),
+            guide_id=message.guide_id, guide_question_id=None, trace_id=trace_id
+        ).model_dump_json(),
         trace_id=trace_id,
     )
 
@@ -140,9 +136,20 @@ async def ingest_guide(
         questions=len(questions),
         trace_id=trace_id,
     )
+    ingest_cost = cost_usd(total_usage, _EXTRACTION_MODEL)
     emit_metrics(
-        [(M_INGEST_COST_USD, cost_usd(total_usage, _EXTRACTION_MODEL), UNIT_NONE)],
+        [(M_INGEST_COST_USD, ingest_cost, UNIT_NONE)],
         guide_id=message.guide_id,
+        trace_id=trace_id,
+    )
+    await repo.save_cost_event(
+        worker="guide_ingest",
+        model=_EXTRACTION_MODEL,
+        input_tokens=total_usage.input_tokens,
+        output_tokens=total_usage.output_tokens,
+        cache_creation_input_tokens=total_usage.cache_creation_input_tokens,
+        cache_read_input_tokens=total_usage.cache_read_input_tokens,
+        cost_usd=ingest_cost,
         trace_id=trace_id,
     )
     return IngestOutcome(

@@ -70,13 +70,7 @@ def test_sanitize_solution_drops_unknown_tags() -> None:
 
 
 def test_sanitize_solution_empty_allowed_clears_tags() -> None:
-    gen = _gen(
-        steps=[
-            SolutionStep(
-                latex="2+2", explanation_es="suma", expected_error_tags=["X"]
-            )
-        ]
-    )
+    gen = _gen(steps=[SolutionStep(latex="2+2", explanation_es="suma", expected_error_tags=["X"])])
     clean = sanitize_solution(gen, set())
     assert clean.steps[0].expected_error_tags == []
 
@@ -84,19 +78,10 @@ def test_sanitize_solution_empty_allowed_clears_tags() -> None:
 def test_collect_error_tags_dedupes_and_preserves_order() -> None:
     gen = _gen(
         steps=[
-            SolutionStep(
-                latex="a",
-                explanation_es="e",
-                expected_error_tags=[
-                    "B",
-                    "A"]),
-            SolutionStep(
-                latex="b",
-                explanation_es="e",
-                expected_error_tags=[
-                    "A",
-                    "C"]),
-        ])
+            SolutionStep(latex="a", explanation_es="e", expected_error_tags=["B", "A"]),
+            SolutionStep(latex="b", explanation_es="e", expected_error_tags=["A", "C"]),
+        ]
+    )
     assert collect_error_tags(gen) == ["B", "A", "C"]
 
 

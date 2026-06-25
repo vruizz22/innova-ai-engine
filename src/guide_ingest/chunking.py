@@ -26,8 +26,7 @@ def compute_chunk_ranges(
     return ranges
 
 
-def offset_pages(result: ExtractGuideResult,
-                 page_offset: int) -> ExtractGuideResult:
+def offset_pages(result: ExtractGuideResult, page_offset: int) -> ExtractGuideResult:
     """Shift every figure bbox page by `page_offset` so chunk-relative pages become
     absolute pages in the source PDF (the extractor only sees the chunk)."""
     return ExtractGuideResult(

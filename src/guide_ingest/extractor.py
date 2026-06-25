@@ -34,12 +34,8 @@ class SonnetExtractor:
         self._paused_param = settings.ssm_guides_ingest_paused_param
 
     async def extract_chunk(
-            self,
-            pdf_chunk: bytes,
-            *,
-            grade_level: int,
-            page_count: int,
-            trace_id: str = "") -> tuple[ExtractGuideResult, TokenUsage]:
+        self, pdf_chunk: bytes, *, grade_level: int, page_count: int, trace_id: str = ""
+    ) -> tuple[ExtractGuideResult, TokenUsage]:
         ensure_not_paused(self._paused_param, trace_id=trace_id)
         encoded = base64.standard_b64encode(pdf_chunk).decode("ascii")
         user_content: list[dict[str, object]] = [

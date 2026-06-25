@@ -14,9 +14,7 @@ logger = structlog.get_logger()
 _RENDER_SCALE = 2
 
 
-def bbox_to_pixels(
-    bbox: FigureBBox, width_px: int, height_px: int
-) -> tuple[int, int, int, int]:
+def bbox_to_pixels(bbox: FigureBBox, width_px: int, height_px: int) -> tuple[int, int, int, int]:
     """Normalized top-left [0,1] bbox -> integer pixel box (left, top, right, bottom),
     ordered and clamped to a non-empty region. Pure (unit-tested without pypdfium2)."""
     left = int(min(bbox.x0, bbox.x1) * width_px)

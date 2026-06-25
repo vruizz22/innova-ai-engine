@@ -5,8 +5,10 @@ import json
 
 import pytest
 
+from src.observability.cost import TokenUsage
 from src.shared.killswitch import PausedError
 from src.shared.settings import Settings
+from src.submission_grader.ports import GraderResponseError
 from src.submission_grader.schemas import (
     AlignMatch,
     Alignment,
@@ -18,7 +20,7 @@ from src.submission_grader.schemas import (
     Transcription,
     TranscriptionStep,
 )
-from src.submission_grader.service import grade_submission
+from src.submission_grader.service import GRADER_RESPONSE_FAILURE, grade_submission
 
 
 def _settings(**over: object) -> Settings:
@@ -55,30 +57,18 @@ def _ctx(photo_keys: list[str] | None = None) -> SubmissionContext:
     )
 
 
-def _ta(
-        confidence: float,
-        *,
-        verdict: AlignVerdict = AlignVerdict.OK) -> TranscribeAndAlign:
+def _ta(confidence: float, *, verdict: AlignVerdict = AlignVerdict.OK) -> TranscribeAndAlign:
     return TranscribeAndAlign(
         transcription=Transcription(
-            steps=[
-                TranscriptionStep(
-                    idx=0,
-                    latex="2+2")],
+            steps=[TranscriptionStep(idx=0, latex="2+2")],
             final_answer="4",
             confidence=confidence,
         ),
         alignment=Alignment(
             path="MAIN",
-            matches=[
-                AlignMatch(
-                    student_step_idx=0,
-                    solution_checkpoint_idx=0,
-                    verdict=verdict)],
+            matches=[AlignMatch(student_step_idx=0, solution_checkpoint_idx=0, verdict=verdict)],
         ),
-        provisional=Provisional(
-            is_correct=verdict is AlignVerdict.OK,
-            score_0_1=1.0),
+        provisional=Provisional(is_correct=verdict is AlignVerdict.OK, score_0_1=1.0),
     )
 
 
@@ -88,20 +78,31 @@ class _FakeGrader:
         self.calls = 0
 
     async def grade(
-            self,
-            images: list[bytes],
-            **kwargs: object) -> TranscribeAndAlign:
+        self, images: list[bytes], **kwargs: object
+    ) -> tuple[TranscribeAndAlign, TokenUsage]:
         result = self._results[min(self.calls, len(self._results) - 1)]
         self.calls += 1
-        return result
+        return result, TokenUsage(input_tokens=200, output_tokens=100, cache_read_input_tokens=800)
 
 
 class _RaisingGrader:
     async def grade(
-            self,
-            images: list[bytes],
-            **kwargs: object) -> TranscribeAndAlign:
+        self, images: list[bytes], **kwargs: object
+    ) -> tuple[TranscribeAndAlign, TokenUsage]:
         raise PausedError("paused")
+
+
+class _ResponseErrorGrader:
+    """Emulates Haiku returning an unparseable payload (missing alignment/provisional)."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def grade(
+        self, images: list[bytes], **kwargs: object
+    ) -> tuple[TranscribeAndAlign, TokenUsage]:
+        self.calls += 1
+        raise GraderResponseError("unparseable transcribe_and_align payload")
 
 
 class _FakeStore:
@@ -120,12 +121,7 @@ class _FakePublisher:
     def __init__(self) -> None:
         self.published: list[tuple[str, str, str]] = []
 
-    def publish(
-            self,
-            queue_url: str,
-            body: str,
-            *,
-            trace_id: str = "") -> None:
+    def publish(self, queue_url: str, body: str, *, trace_id: str = "") -> None:
         self.published.append((queue_url, body, trace_id))
 
 
@@ -133,18 +129,16 @@ class _FakeRepo:
     def __init__(self, ctx: SubmissionContext | None) -> None:
         self._ctx = ctx
         self.saved: list[dict[str, object]] = []
+        self.cost_events: list[dict[str, object]] = []
 
-    async def load_submission_context(
-        self, guide_submission_id: str
-    ) -> SubmissionContext | None:
+    async def load_submission_context(self, guide_submission_id: str) -> SubmissionContext | None:
         return self._ctx
 
-    async def save_grading(
-            self,
-            guide_submission_id: str,
-            **kwargs: object) -> None:
-        self.saved.append(
-            {"guide_submission_id": guide_submission_id, **kwargs})
+    async def save_grading(self, guide_submission_id: str, **kwargs: object) -> None:
+        self.saved.append({"guide_submission_id": guide_submission_id, **kwargs})
+
+    async def save_cost_event(self, **kwargs: object) -> None:
+        self.cost_events.append(kwargs)
 
 
 def test_legible_persists_grading_and_publishes_reprocess() -> None:
@@ -182,6 +176,14 @@ def test_legible_persists_grading_and_publishes_reprocess() -> None:
     assert payload["guide_question_id"] == "q1"
     assert payload["latex_steps"] == ["2+2"]
     assert payload["alignment_summary"]["path"] == "MAIN"
+
+    # A9.4/C2 — cost event persisted with correct worker and model
+    assert len(repo.cost_events) == 1
+    ce = repo.cost_events[0]
+    assert ce["worker"] == "submission_grader"
+    assert ce["model"] == "claude-haiku-4-5"
+    assert isinstance(ce["cost_usd"], float)
+    assert ce["trace_id"] == "tr1"
 
 
 def test_low_confidence_retries_once_then_succeeds() -> None:
@@ -265,6 +267,84 @@ def test_missing_context_returns_failed_without_write() -> None:
     )
     assert outcome.status == "FAILED"
     assert repo.saved == []
+
+
+def test_unreadable_grader_response_marks_failed_without_retry() -> None:
+    grader = _ResponseErrorGrader()
+    publisher = _FakePublisher()
+    repo = _FakeRepo(_ctx())
+
+    outcome = asyncio.run(
+        grade_submission(
+            _msg(),
+            grader=grader,
+            store=_FakeStore(),
+            publisher=publisher,
+            repo=repo,
+            settings=_settings(),
+        )
+    )
+
+    # One call only: retrying a deterministic bad response just re-bills the vision call.
+    assert grader.calls == 1
+    assert outcome.status == "FAILED"
+    assert outcome.failure_reason == GRADER_RESPONSE_FAILURE
+    assert outcome.published is False
+    assert publisher.published == []
+    saved = repo.saved[0]
+    assert saved["status"] == "FAILED"
+    assert saved["failure_reason"] == GRADER_RESPONSE_FAILURE
+    assert saved["alignment_json"] is None
+
+
+def test_full_page_scan_publishes_only_aligned_steps() -> None:
+    """Full-page scan: 5 transcribed steps (multiple exercises) but only the fraction
+    step (idx=1) is aligned to the solution. The reprocess payload must carry only
+    that one step so the LLM classifier is not confused by unrelated exercises."""
+    multi_step_result = TranscribeAndAlign(
+        transcription=Transcription(
+            steps=[
+                TranscriptionStep(idx=0, latex="-8+5+3=0"),
+                TranscriptionStep(idx=1, latex=r"\frac{3}{4}+\frac{2}{5}=\frac{6}{9}"),
+                TranscriptionStep(idx=2, latex="9.35 \\times 80 = 280"),
+                TranscriptionStep(idx=3, latex="2x+5=13"),
+            ],
+            final_answer=r"\frac{6}{9}",
+            confidence=0.88,
+        ),
+        alignment=Alignment(
+            path="MAIN",
+            matches=[
+                AlignMatch(
+                    student_step_idx=1,
+                    solution_checkpoint_idx=0,
+                    verdict=AlignVerdict.ERROR,
+                )
+            ],
+        ),
+        provisional=Provisional(is_correct=False, score_0_1=0.0, first_error_step_idx=1),
+    )
+
+    grader = _FakeGrader([multi_step_result])
+    publisher = _FakePublisher()
+    repo = _FakeRepo(_ctx())
+
+    outcome = asyncio.run(
+        grade_submission(
+            _msg(),
+            grader=grader,
+            store=_FakeStore(),
+            publisher=publisher,
+            repo=repo,
+            settings=_settings(),
+        )
+    )
+
+    assert outcome.status == "GRADING"
+    assert len(publisher.published) == 1
+    payload = json.loads(publisher.published[0][1])
+    # Only the aligned fraction step must reach the reprocess queue — no integer/algebra noise
+    assert payload["latex_steps"] == [r"\frac{3}{4}+\frac{2}{5}=\frac{6}{9}"]
 
 
 def test_killswitch_propagates_and_writes_nothing() -> None:

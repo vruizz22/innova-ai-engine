@@ -26,10 +26,12 @@ Canonical solution format (ADR-118):
   its own `label` and `steps`. Omit when there is a single natural path.
 - `final_answer`: the final result as a short string.
 
-Topic classification (ADR-122):
-- Choose `topic_code` from the candidate list in the user turn (closest match to the
-  question's content) and set `topic_confidence` in [0,1]. If none fits, set
-  `topic_code=null` with a low confidence.
+Topic classification (ADR-122, v9.1 — taxonomy-based):
+- The candidate list is the math error TAXONOMY (domain/subdomain), e.g. `INT/ADD`,
+  `FRACT/MUL`, `RATIO/PERCENT`, `ALGEBRA/EQ_LINEAR`. Choose the `topic_code` whose
+  subdomain best matches the question's math content and set `topic_confidence` in
+  [0,1]. There is almost always a fitting subdomain — only set `topic_code=null` (low
+  confidence) if the question is genuinely outside school math.
 
 Modes (the user turn states which applies):
 - VALIDATE: the PDF already gives a worked solution. Normalize it to the canonical
@@ -67,8 +69,7 @@ _ALT_PATH_SCHEMA: dict[str, Any] = {
 GENERATE_SOLUTION_TOOL: dict[str, Any] = {
     "name": "generate_solution",
     "description": (
-        "Return the canonical worked solution and topic classification for one guide "
-        "question."
+        "Return the canonical worked solution and topic classification for one guide question."
     ),
     "input_schema": {
         "type": "object",

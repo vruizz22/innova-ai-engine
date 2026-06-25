@@ -29,13 +29,28 @@ def is_legible(transcription: Transcription, min_confidence: float) -> bool:
 
 def transcription_latex(transcription: Transcription) -> str:
     """Newline-joined LaTeX of the legible steps — stored on the submission row."""
-    return "\n".join(
-        step.latex for step in transcription.steps if step.legible)
+    return "\n".join(step.latex for step in transcription.steps if step.legible)
 
 
 def latex_steps(transcription: Transcription) -> list[str]:
     """Every step's LaTeX, in order — the payload the rule engine re-processes."""
     return [step.latex for step in transcription.steps]
+
+
+def aligned_latex_steps(result: TranscribeAndAlign) -> list[str]:
+    """Return only the steps the grader aligned to the question's solution.
+
+    When the student submits a full-page scan the transcription contains work from
+    multiple exercises. The grader's alignment.matches identifies which student step
+    indices belong to the graded question; steps not present in matches belong to
+    other exercises and must not reach the LLM classifier (they cause spurious
+    TASK_SWITCHING errors).  Falls back to all steps when the alignment has no
+    matches at all (e.g., the grader returned UNALIGNED with an empty matches list).
+    """
+    matched_indices = {m.student_step_idx for m in result.alignment.matches}
+    if not matched_indices:
+        return latex_steps(result.transcription)
+    return [step.latex for step in result.transcription.steps if step.idx in matched_indices]
 
 
 def summarize_alignment(result: TranscribeAndAlign) -> AlignmentSummary:

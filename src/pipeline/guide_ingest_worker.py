@@ -14,6 +14,7 @@ from src.guide_ingest.schemas import GuideIngestMessage
 from src.guide_ingest.service import ingest_guide
 from src.guide_ingest.storage import S3ObjectStore
 from src.observability.logging import configure_logging
+from src.observability.metrics import M_EXTRACTION_FAILED, UNIT_COUNT, emit_metrics
 from src.observability.tracing import bind_trace_id
 from src.shared.killswitch import PausedError
 from src.shared.postgres import get_pool
@@ -22,13 +23,13 @@ from src.shared.settings import get_settings
 logger = structlog.get_logger()
 
 
-async def _main(event: dict[str, object],
-                context: object) -> dict[str, object]:
+async def _main(event: dict[str, object], context: object) -> dict[str, object]:
     configure_logging()
 
     raw_records = event.get("Records")
-    records: list[dict[str, object]] = (cast(
-        "list[dict[str, object]]", raw_records) if isinstance(raw_records, list) else [])
+    records: list[dict[str, object]] = (
+        cast("list[dict[str, object]]", raw_records) if isinstance(raw_records, list) else []
+    )
     if not records:
         return {"processed": 0, "batchItemFailures": []}
 
@@ -50,8 +51,7 @@ async def _main(event: dict[str, object],
         for record in records:
             message_id = str(record.get("messageId", ""))
             try:
-                message = GuideIngestMessage.model_validate_json(
-                    str(record.get("body", "")))
+                message = GuideIngestMessage.model_validate_json(str(record.get("body", "")))
                 bind_trace_id(message.trace_id)
                 outcome = await ingest_guide(
                     message,
@@ -76,10 +76,11 @@ async def _main(event: dict[str, object],
                 logger.warning("guide_ingest_paused", message_id=message_id)
             except Exception as exc:
                 failures.append({"itemIdentifier": message_id})
-                logger.error(
-                    "guide_ingest_record_failed",
-                    error=str(exc),
-                    message_id=message_id)
+                emit_metrics(
+                    [(M_EXTRACTION_FAILED, 1.0, UNIT_COUNT)],
+                    message_id=message_id,
+                )
+                logger.error("guide_ingest_record_failed", error=str(exc), message_id=message_id)
 
     return {"processed": processed, "batchItemFailures": failures}
 
