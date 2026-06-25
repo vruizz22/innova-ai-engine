@@ -30,9 +30,7 @@ def _settings(**over: object) -> Settings:
 
 
 def _msg(question_id: str | None = None) -> SolutionGenMessage:
-    return SolutionGenMessage(
-        guide_id="g1", guide_question_id=question_id, trace_id="tr1"
-    )
+    return SolutionGenMessage(guide_id="g1", guide_question_id=question_id, trace_id="tr1")
 
 
 _CANDIDATE = TopicCandidate(
@@ -112,9 +110,7 @@ class _FakeRepo:
             questions=questions,
         )
 
-    async def fetch_topic_candidates(
-        self, subject_id: str, grade_min: int, grade_max: int
-    ) -> list[TopicCandidate]:
+    async def fetch_taxonomy_candidates(self, grade_level: int) -> list[TopicCandidate]:
         return [_CANDIDATE]
 
     async def fetch_active_error_codes(self, domain_id: str) -> set[str]:
@@ -126,9 +122,7 @@ class _FakeRepo:
     async def count_unsolved(self, guide_id: str) -> int:
         return self._unsolved
 
-    async def mark_guide_review_and_alert(
-        self, guide_id: str, **kwargs: object
-    ) -> bool:
+    async def mark_guide_review_and_alert(self, guide_id: str, **kwargs: object) -> bool:
         self.reviewed.append(guide_id)
         return True
 
@@ -145,16 +139,12 @@ def _solution(**over: object) -> GeneratedSolution:
 
 
 def test_full_question_persists_needs_review_and_keeps_generating() -> None:
-    question = QuestionToSolve(
-        question_id="q1", sequence=1, statement_latex="$2+2$"
-    )
+    question = QuestionToSolve(question_id="q1", sequence=1, statement_latex="$2+2$")
     generator = _FakeGenerator(_solution(matches_provided=None))
     repo = _FakeRepo([question], unsolved=1)  # other questions still pending
 
     outcome = asyncio.run(
-        generate_solutions(
-            _msg(), generator=generator, repo=repo, settings=_settings()
-        )
+        generate_solutions(_msg(), generator=generator, repo=repo, settings=_settings())
     )
 
     assert generator.modes == [GenerationMode.FULL]
@@ -182,9 +172,7 @@ def test_validate_match_is_extracted_and_pdf_sourced() -> None:
     repo = _FakeRepo([question], unsolved=0)
 
     outcome = asyncio.run(
-        generate_solutions(
-            _msg(), generator=generator, repo=repo, settings=_settings()
-        )
+        generate_solutions(_msg(), generator=generator, repo=repo, settings=_settings())
     )
 
     assert generator.modes == [GenerationMode.VALIDATE]
@@ -202,29 +190,21 @@ def test_validate_match_is_extracted_and_pdf_sourced() -> None:
 
 def test_derive_mismatch_flags_review() -> None:
     question = QuestionToSolve(
-        question_id="q1",
-        sequence=1,
-        statement_latex="$2+2$",
-        provided_answer="5")
+        question_id="q1", sequence=1, statement_latex="$2+2$", provided_answer="5"
+    )
     generator = _FakeGenerator(
         _solution(matches_provided=False, validation_notes="llega a 4, no a 5")
     )
     repo = _FakeRepo([question], unsolved=0)
 
-    asyncio.run(
-        generate_solutions(
-            _msg(), generator=generator, repo=repo, settings=_settings()
-        )
-    )
+    asyncio.run(generate_solutions(_msg(), generator=generator, repo=repo, settings=_settings()))
 
     assert generator.modes == [GenerationMode.DERIVE]
     assert repo.saved[0]["status"] == "NEEDS_REVIEW"
 
 
 def test_error_tags_constrained_to_active_catalog() -> None:
-    question = QuestionToSolve(
-        question_id="q1", sequence=1, statement_latex="$2+2$"
-    )
+    question = QuestionToSolve(question_id="q1", sequence=1, statement_latex="$2+2$")
     generator = _FakeGenerator(
         _solution(
             steps=[
@@ -238,19 +218,13 @@ def test_error_tags_constrained_to_active_catalog() -> None:
     )
     repo = _FakeRepo([question], unsolved=0, active_codes={"ARITH.CARRY"})
 
-    asyncio.run(
-        generate_solutions(
-            _msg(), generator=generator, repo=repo, settings=_settings()
-        )
-    )
+    asyncio.run(generate_solutions(_msg(), generator=generator, repo=repo, settings=_settings()))
 
     assert repo.saved[0]["expected_error_tags"] == ["ARITH.CARRY"]
 
 
 def test_unresolved_topic_clears_tags_and_flags_review() -> None:
-    question = QuestionToSolve(
-        question_id="q1", sequence=1, statement_latex="$2+2$"
-    )
+    question = QuestionToSolve(question_id="q1", sequence=1, statement_latex="$2+2$")
     generator = _FakeGenerator(
         _solution(
             topic_code="UNKNOWN.CODE",
@@ -265,11 +239,7 @@ def test_unresolved_topic_clears_tags_and_flags_review() -> None:
     )
     repo = _FakeRepo([question], unsolved=0)
 
-    asyncio.run(
-        generate_solutions(
-            _msg(), generator=generator, repo=repo, settings=_settings()
-        )
-    )
+    asyncio.run(generate_solutions(_msg(), generator=generator, repo=repo, settings=_settings()))
 
     saved = repo.saved[0]
     assert saved["status"] == "NEEDS_REVIEW"  # topic unresolved
@@ -278,27 +248,24 @@ def test_unresolved_topic_clears_tags_and_flags_review() -> None:
 
 
 def test_steps_json_is_canonical_document() -> None:
-    question = QuestionToSolve(
-        question_id="q1", sequence=1, statement_latex="$2+2$"
-    )
+    question = QuestionToSolve(question_id="q1", sequence=1, statement_latex="$2+2$")
     generator = _FakeGenerator(_solution())
     repo = _FakeRepo([question], unsolved=0)
 
-    asyncio.run(
-        generate_solutions(
-            _msg(), generator=generator, repo=repo, settings=_settings()
-        )
-    )
+    asyncio.run(generate_solutions(_msg(), generator=generator, repo=repo, settings=_settings()))
 
     payload = json.loads(str(repo.saved[0]["steps_json"]))
     assert "steps" in payload and "alt_paths" in payload
     assert payload["steps"][0]["latex"] == "2+2"
+    # ADR-118 contract — enforced by both backend canonicalSolutionSchema and the
+    # frontend Zod on getGuide; missing any of these breaks the review wizard.
+    assert payload["final_answer"] == "4"
+    assert payload["points"] == 1.0
+    assert payload["steps"][0]["idx"] == 0
 
 
 def test_killswitch_propagates_and_saves_nothing() -> None:
-    question = QuestionToSolve(
-        question_id="q1", sequence=1, statement_latex="$2+2$"
-    )
+    question = QuestionToSolve(question_id="q1", sequence=1, statement_latex="$2+2$")
     repo = _FakeRepo([question], unsolved=1)
 
     with pytest.raises(PausedError):
@@ -325,10 +292,8 @@ def test_missing_guide_returns_zero() -> None:
     repo = _EmptyRepo([])
     outcome = asyncio.run(
         generate_solutions(
-            _msg(),
-            generator=_FakeGenerator(
-                _solution()),
-            repo=repo,
-            settings=_settings()))
+            _msg(), generator=_FakeGenerator(_solution()), repo=repo, settings=_settings()
+        )
+    )
     assert outcome.processed == 0
     assert repo.saved == []

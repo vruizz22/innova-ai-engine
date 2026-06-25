@@ -110,9 +110,7 @@ DOMAIN_SPECS: dict[str, DomainPromptSpec] = {
     "ARITH": DomainPromptSpec(
         code="ARITH", title="Arithmetic with natural numbers", grade_range="G1-G6"
     ),
-    "INT": DomainPromptSpec(
-        code="INT", title="Integers (signed numbers)", grade_range="G7-G8"
-    ),
+    "INT": DomainPromptSpec(code="INT", title="Integers (signed numbers)", grade_range="G7-G8"),
     "FRACT": DomainPromptSpec(code="FRACT", title="Fractions", grade_range="G4-G8"),
     "DEC": DomainPromptSpec(code="DEC", title="Decimal numbers", grade_range="G5-G8"),
     "RATIO": DomainPromptSpec(
@@ -125,34 +123,20 @@ DOMAIN_SPECS: dict[str, DomainPromptSpec] = {
         title="Algebra (expressions, equations, systems)",
         grade_range="G7-G12",
     ),
-    "POW": DomainPromptSpec(
-        code="POW", title="Powers and roots", grade_range="G8-G10"
-    ),
+    "POW": DomainPromptSpec(code="POW", title="Powers and roots", grade_range="G8-G10"),
     "FUNC": DomainPromptSpec(code="FUNC", title="Functions", grade_range="G8-G12"),
-    "GEOM": DomainPromptSpec(
-        code="GEOM", title="Plane geometry", grade_range="G3-G10"
-    ),
+    "GEOM": DomainPromptSpec(code="GEOM", title="Plane geometry", grade_range="G3-G10"),
     "GEOM3D": DomainPromptSpec(
         code="GEOM3D", title="3D geometry, area and volume", grade_range="G5-G12"
     ),
-    "TRIG": DomainPromptSpec(
-        code="TRIG", title="Trigonometry", grade_range="G10-G12"
-    ),
-    "STAT": DomainPromptSpec(
-        code="STAT", title="Statistics", grade_range="G4-G12"
-    ),
+    "TRIG": DomainPromptSpec(code="TRIG", title="Trigonometry", grade_range="G10-G12"),
+    "STAT": DomainPromptSpec(code="STAT", title="Statistics", grade_range="G4-G12"),
     "DATA": DomainPromptSpec(
         code="DATA", title="Data handling and probability", grade_range="G1-G8"
     ),
-    "LOG": DomainPromptSpec(
-        code="LOG", title="Logic and sets", grade_range="G7-G12"
-    ),
-    "SEQ": DomainPromptSpec(
-        code="SEQ", title="Sequences and patterns", grade_range="G7-G12"
-    ),
-    "COORD": DomainPromptSpec(
-        code="COORD", title="Coordinate geometry", grade_range="G6-G12"
-    ),
+    "LOG": DomainPromptSpec(code="LOG", title="Logic and sets", grade_range="G7-G12"),
+    "SEQ": DomainPromptSpec(code="SEQ", title="Sequences and patterns", grade_range="G7-G12"),
+    "COORD": DomainPromptSpec(code="COORD", title="Coordinate geometry", grade_range="G6-G12"),
     "TRANSV": DomainPromptSpec(
         code="TRANSV",
         title="Transversal (cross-cutting) procedural errors",
@@ -167,6 +151,12 @@ You are an expert math education assessor specialized in {title} \
 Your task: given a student's step-by-step solution AND the canonical solution, \
 identify the FIRST procedural error using ONLY the controlled error catalog below.
 
+NOTE — full-page scans: `student_steps` may occasionally include steps from other \
+exercises when the student submitted a full-page photo. Focus exclusively on the steps \
+relevant to the given `problem`; treat unrelated steps as noise and do NOT classify \
+them as TASK_SWITCHING or similar cross-cutting errors — classify based only on the \
+work that pertains to the stated problem.
+
 You MUST use the `classify_errors` tool to return your classification. Never reply \
 in plain text. Process each attempt in the batch independently.
 
@@ -180,9 +170,7 @@ domain, e.g. careless transcription, sign handling, units) -- defer to a second 
 """
 
 
-def build_domain_system_prompt(
-        spec: DomainPromptSpec,
-        taxonomy_text: str) -> str:
+def build_domain_system_prompt(spec: DomainPromptSpec, taxonomy_text: str) -> str:
     """Assemble the cacheable system block for one domain with its ACTIVE catalog."""
     return _DOMAIN_PROMPT_TEMPLATE.format(
         title=spec.title,

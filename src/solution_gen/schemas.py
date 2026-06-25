@@ -35,11 +35,14 @@ class AltPath(BaseModel):
 
 
 class TopicCandidate(BaseModel):
-    """A curriculum topic offered to the classifier (course grade ±1, ADR-122)."""
+    """A classification candidate offered to the LLM. Since v9.1 these are derived
+    from the error taxonomy (domain/subdomain) — always populated — instead of the
+    sparse, hand-seeded `topics` table. `topic_id` links a curriculum topic only when
+    one happens to map to the subdomain; the classification unit is the subdomain."""
 
     code: str
     name: str
-    topic_id: str
+    topic_id: str | None = None
     domain_id: str | None = None
     subdomain_id: str | None = None
     domain_code: str | None = None

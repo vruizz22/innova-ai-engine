@@ -32,10 +32,12 @@ def test_pauta_block_wraps_solution_and_catalog() -> None:
 def test_user_text_carries_grade_and_label() -> None:
     text = build_grade_user_text(5, "3.a")
     assert "Grade level: 5" in text
-    assert "Question label: 3.a" in text
+    assert "3.a" in text
+    # Full-page scan instruction must be present when a label is given.
+    assert "ONLY the work for question '3.a'" in text
 
 
 def test_user_text_without_label() -> None:
     text = build_grade_user_text(4, None)
     assert "Grade level: 4" in text
-    assert "Question label" not in text
+    assert "ONLY the work for question" not in text

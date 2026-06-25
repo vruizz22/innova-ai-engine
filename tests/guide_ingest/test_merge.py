@@ -25,9 +25,7 @@ def test_assigns_sequence() -> None:
 
 def test_stitches_continuation_across_chunks() -> None:
     chunk1 = ExtractGuideResult(questions=[_q("Q1 part"), _q("Q2 head")])
-    chunk2 = ExtractGuideResult(
-        questions=[_q("Q2 tail", continues=True, answer="42"), _q("Q3")]
-    )
+    chunk2 = ExtractGuideResult(questions=[_q("Q2 tail", continues=True, answer="42"), _q("Q3")])
     merged = merge_chunks([chunk1, chunk2])
     assert len(merged) == 3
     assert "Q2 head" in merged[1].statement_text

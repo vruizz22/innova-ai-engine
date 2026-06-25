@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://localhost/innova"
     mongodb_uri: str = "mongodb://localhost/innova"
     log_level: str = "info"
+    # Gemini model for OCR (src/ocr) + PDF precheck (A6). Env-overridable so a project
+    # whose free tier returns limit:0 for one model can switch without code changes.
+    # NOTE: gemini-2.0-flash was shut down 2026-06-01 — default is now 2.5-flash.
+    gemini_model: str = "gemini-2.5-flash"
     ocr_confidence_threshold: float = 0.7
     llm_batch_size: int = 20
     ssm_llm_paused_param: str = "/innova/llm/paused"
@@ -36,6 +40,21 @@ class Settings(BaseSettings):
     ssm_guides_grading_paused_param: str = "/innova/guides/grading_paused"
     ssm_guides_cheap_mode_param: str = "/innova/guides/grading_cheap_mode"
     grading_min_transcription_confidence: float = 0.5
+
+    # v9 guides pipeline — A10 adhoc_solver (scan without guide context)
+    sqs_adhoc_solve_url: str = ""
+
+    # B1/B2 exercise_generator (teacher-triggered AI generation)
+    sqs_exercise_generate_url: str = ""
+
+    # M11 / A9.2 hourly_alerts (EventBridge cron) — detector thresholds
+    alert_at_risk_pknown_floor: float = 0.4
+    alert_at_risk_min_topics: int = 3
+    alert_topic_struggle_ratio: float = 0.5
+    alert_student_drop_trend: float = -0.15
+    alert_unit_off_track_floor: float = 0.4
+    alert_guide_complete_ratio: float = 0.9
+    alert_guide_common_error_ratio: float = 0.3
 
 
 _settings: Settings | None = None

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import base64
+from typing import cast
 
 import structlog
 from anthropic import AsyncAnthropic
+from anthropic.types import MessageParam
+from pydantic import ValidationError
 
+from src.observability.cost import TokenUsage, usage_from_response
 from src.shared.killswitch import ensure_not_paused
 from src.shared.settings import get_settings
+from src.submission_grader.ports import GraderResponseError
 from src.submission_grader.prompts import (
     GRADING_SYSTEM,
     TRANSCRIBE_AND_ALIGN_TOOL,
@@ -42,7 +47,7 @@ class HaikuVisionGrader:
         solution_final_answer: str,
         domain_catalog_text: str,
         trace_id: str = "",
-    ) -> TranscribeAndAlign:
+    ) -> tuple[TranscribeAndAlign, TokenUsage]:
         ensure_not_paused(self._paused_param, trace_id=trace_id)
         user_content: list[dict[str, object]] = [
             {
@@ -78,13 +83,24 @@ class HaikuVisionGrader:
             ],
             tools=[TRANSCRIBE_AND_ALIGN_TOOL],  # type: ignore[arg-type]
             tool_choice={"type": "tool", "name": "transcribe_and_align"},
-            # type: ignore[arg-type]
-            messages=[{"role": "user", "content": user_content}],
+            messages=cast(
+                list[MessageParam],
+                [{"role": "user", "content": user_content}],
+            ),
         )
 
+        usage = usage_from_response(response.usage)
         for block in response.content:
             if block.type == "tool_use" and block.name == "transcribe_and_align":
-                result = TranscribeAndAlign.model_validate(block.input)
+                try:
+                    result = TranscribeAndAlign.model_validate(block.input)
+                except ValidationError as exc:
+                    # Malformed tool payload (e.g. the model omitted `alignment` /
+                    # `provisional`). Non-retryable — surface as a terminal grader error
+                    # so the service closes the submission instead of redelivering it.
+                    raise GraderResponseError(
+                        "grader returned an unparseable transcribe_and_align payload"
+                    ) from exc
                 logger.info(
                     "submission_graded",
                     images=len(images),
@@ -93,8 +109,8 @@ class HaikuVisionGrader:
                     score=result.provisional.score_0_1,
                     trace_id=trace_id,
                 )
-                return result
+                return result, usage
 
-        raise RuntimeError(
+        raise GraderResponseError(
             "grader returned no transcribe_and_align tool_use block (forced tool_choice)"
         )

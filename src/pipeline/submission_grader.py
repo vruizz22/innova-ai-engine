@@ -20,13 +20,13 @@ from src.submission_grader.service import grade_submission
 logger = structlog.get_logger()
 
 
-async def _main(event: dict[str, object],
-                context: object) -> dict[str, object]:
+async def _main(event: dict[str, object], context: object) -> dict[str, object]:
     configure_logging()
 
     raw_records = event.get("Records")
-    records: list[dict[str, object]] = (cast(
-        "list[dict[str, object]]", raw_records) if isinstance(raw_records, list) else [])
+    records: list[dict[str, object]] = (
+        cast("list[dict[str, object]]", raw_records) if isinstance(raw_records, list) else []
+    )
     if not records:
         return {"processed": 0, "batchItemFailures": []}
 
@@ -46,9 +46,7 @@ async def _main(event: dict[str, object],
         for record in records:
             message_id = str(record.get("messageId", ""))
             try:
-                message = GradeSubmissionMessage.model_validate_json(
-                    str(record.get("body", ""))
-                )
+                message = GradeSubmissionMessage.model_validate_json(str(record.get("body", "")))
                 bind_trace_id(message.trace_id)
                 outcome = await grade_submission(
                     message,
@@ -68,9 +66,7 @@ async def _main(event: dict[str, object],
             except PausedError:
                 # Cost killswitch: leave the message for SQS to retry later.
                 failures.append({"itemIdentifier": message_id})
-                logger.warning(
-                    "submission_grade_paused",
-                    message_id=message_id)
+                logger.warning("submission_grade_paused", message_id=message_id)
             except Exception as exc:
                 failures.append({"itemIdentifier": message_id})
                 logger.error(

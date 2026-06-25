@@ -18,13 +18,13 @@ from src.solution_gen.service import generate_solutions
 logger = structlog.get_logger()
 
 
-async def _main(event: dict[str, object],
-                context: object) -> dict[str, object]:
+async def _main(event: dict[str, object], context: object) -> dict[str, object]:
     configure_logging()
 
     raw_records = event.get("Records")
-    records: list[dict[str, object]] = (cast(
-        "list[dict[str, object]]", raw_records) if isinstance(raw_records, list) else [])
+    records: list[dict[str, object]] = (
+        cast("list[dict[str, object]]", raw_records) if isinstance(raw_records, list) else []
+    )
     if not records:
         return {"processed": 0, "batchItemFailures": []}
 
@@ -42,9 +42,7 @@ async def _main(event: dict[str, object],
         for record in records:
             message_id = str(record.get("messageId", ""))
             try:
-                message = SolutionGenMessage.model_validate_json(
-                    str(record.get("body", ""))
-                )
+                message = SolutionGenMessage.model_validate_json(str(record.get("body", "")))
                 bind_trace_id(message.trace_id)
                 outcome = await generate_solutions(
                     message,
@@ -66,10 +64,7 @@ async def _main(event: dict[str, object],
                 logger.warning("solution_gen_paused", message_id=message_id)
             except Exception as exc:
                 failures.append({"itemIdentifier": message_id})
-                logger.error(
-                    "solution_gen_record_failed",
-                    error=str(exc),
-                    message_id=message_id)
+                logger.error("solution_gen_record_failed", error=str(exc), message_id=message_id)
 
     return {"processed": processed, "batchItemFailures": failures}
 

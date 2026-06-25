@@ -11,11 +11,7 @@ def test_tool_name_and_question_schema() -> None:
     assert EXTRACT_GUIDE_TOOL["name"] == "extract_guide"
     item = EXTRACT_GUIDE_TOOL["input_schema"]["properties"]["questions"]["items"]
     props = item["properties"]
-    for field in (
-        "statement_latex",
-        "statement_text",
-        "figure_bboxes",
-            "continues_previous"):
+    for field in ("statement_latex", "statement_text", "figure_bboxes", "continues_previous"):
         assert field in props
     assert item["required"] == ["statement_latex", "statement_text"]
 

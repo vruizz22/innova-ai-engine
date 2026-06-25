@@ -33,6 +33,7 @@ provider:
             - arn:aws:ssm:us-east-1:*:parameter/innova/*
 
   environment:
+    STAGE: ${self:provider.stage}
     ANTHROPIC_API_KEY: ${env:ANTHROPIC_API_KEY, ''}
     GEMINI_API_KEY: ${env:GEMINI_API_KEY, ''}
     DATABASE_URL: ${env:DATABASE_URL, ''}
@@ -60,6 +61,14 @@ provider:
     SSM_GUIDES_GRADING_PAUSED_PARAM: ${env:SSM_GUIDES_GRADING_PAUSED_PARAM, '/innova/guides/grading_paused'}
     SSM_GUIDES_CHEAP_MODE_PARAM: ${env:SSM_GUIDES_CHEAP_MODE_PARAM, '/innova/guides/grading_cheap_mode'}
     GRADING_MIN_TRANSCRIPTION_CONFIDENCE: ${env:GRADING_MIN_TRANSCRIPTION_CONFIDENCE, '0.5'}
+    # M11 / A9.2 hourly_alerts — detector thresholds
+    ALERT_AT_RISK_PKNOWN_FLOOR: ${env:ALERT_AT_RISK_PKNOWN_FLOOR, '0.4'}
+    ALERT_AT_RISK_MIN_TOPICS: ${env:ALERT_AT_RISK_MIN_TOPICS, '3'}
+    ALERT_TOPIC_STRUGGLE_RATIO: ${env:ALERT_TOPIC_STRUGGLE_RATIO, '0.5'}
+    ALERT_STUDENT_DROP_TREND: ${env:ALERT_STUDENT_DROP_TREND, '-0.15'}
+    ALERT_UNIT_OFF_TRACK_FLOOR: ${env:ALERT_UNIT_OFF_TRACK_FLOOR, '0.4'}
+    ALERT_GUIDE_COMPLETE_RATIO: ${env:ALERT_GUIDE_COMPLETE_RATIO, '0.9'}
+    ALERT_GUIDE_COMMON_ERROR_RATIO: ${env:ALERT_GUIDE_COMMON_ERROR_RATIO, '0.3'}
 
 custom:
   customDomain:
@@ -123,6 +132,19 @@ functions:
     events:
       - schedule:
           rate: cron(15 7 * * ? *)
+          enabled: true
+
+  hourlyAlerts:
+    image:
+      name: ai-engine-image
+      command:
+        - src.pipeline.hourly_alerts.handler
+    # Scans mastery + published-guide state and writes deduped TeacherAlerts (M11/A9.2).
+    timeout: 900
+    memorySize: 1024
+    events:
+      - schedule:
+          rate: cron(0 * * * ? *)
           enabled: true
 
   ocrWorker:

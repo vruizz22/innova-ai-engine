@@ -14,7 +14,7 @@ class PdfKind(StrEnum):
 
 
 class PrecheckResult(BaseModel):
-    """Cheap Gemini 2.0 Flash triage before spending Sonnet tokens (ADR v9 A6.1)."""
+    """Cheap Gemini Flash triage before spending Sonnet tokens (ADR v9 A6.1)."""
 
     kind: PdfKind
     content_pages: list[int] = Field(default_factory=list)

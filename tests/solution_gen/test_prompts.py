@@ -43,8 +43,7 @@ def test_user_text_carries_mode_grade_and_candidates() -> None:
             grade_level=5,
         )
     ]
-    text = build_generate_user_text(
-        question, GenerationMode.DERIVE, candidates, 5)
+    text = build_generate_user_text(question, GenerationMode.DERIVE, candidates, 5)
     assert "Mode: DERIVE" in text
     assert "Grade level: 5" in text
     assert "3.a" in text
@@ -53,8 +52,6 @@ def test_user_text_carries_mode_grade_and_candidates() -> None:
 
 
 def test_user_text_handles_no_candidates() -> None:
-    question = QuestionToSolve(
-        question_id="q1", sequence=1, statement_latex="$x$"
-    )
+    question = QuestionToSolve(question_id="q1", sequence=1, statement_latex="$x$")
     text = build_generate_user_text(question, GenerationMode.FULL, [], 3)
     assert "set topic_code=null" in text

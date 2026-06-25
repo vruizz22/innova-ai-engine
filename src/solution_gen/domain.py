@@ -16,9 +16,7 @@ SOURCE_PDF = "PDF_PROVIDED"  # VALIDATE normalizes the PDF's own solution
 SOURCE_LLM = "LLM_GENERATED"  # DERIVE/FULL are model-authored
 
 
-def decide_mode(
-    provided_solution_latex: str | None, provided_answer: str | None
-) -> GenerationMode:
+def decide_mode(provided_solution_latex: str | None, provided_answer: str | None) -> GenerationMode:
     """Pick the generation mode from what the extraction carried (ADR v9 A7.1)."""
     if provided_solution_latex and provided_solution_latex.strip():
         return GenerationMode.VALIDATE
@@ -37,8 +35,7 @@ def solution_source(mode: GenerationMode) -> str:
     return SOURCE_PDF if mode is GenerationMode.VALIDATE else SOURCE_LLM
 
 
-def index_candidates(
-        candidates: list[TopicCandidate]) -> dict[str, TopicCandidate]:
+def index_candidates(candidates: list[TopicCandidate]) -> dict[str, TopicCandidate]:
     """code -> candidate; first occurrence wins (curriculum-version dedupe)."""
     index: dict[str, TopicCandidate] = {}
     for cand in candidates:
@@ -46,8 +43,7 @@ def index_candidates(
     return index
 
 
-def _sanitize_steps(steps: list[SolutionStep],
-                    allowed: set[str]) -> list[SolutionStep]:
+def _sanitize_steps(steps: list[SolutionStep], allowed: set[str]) -> list[SolutionStep]:
     cleaned: list[SolutionStep] = []
     for step in steps:
         tags = [tag for tag in step.expected_error_tags if tag in allowed]
@@ -55,8 +51,7 @@ def _sanitize_steps(steps: list[SolutionStep],
     return cleaned
 
 
-def sanitize_solution(gen: GeneratedSolution,
-                      allowed: set[str]) -> GeneratedSolution:
+def sanitize_solution(gen: GeneratedSolution, allowed: set[str]) -> GeneratedSolution:
     """Return a copy whose every step's `expected_error_tags` are constrained to the
     resolved domain's ACTIVE catalog (ADR v9 A7.2). Guarantees stored tags are real
     codes even when the model hallucinates; an empty `allowed` (unresolved domain)

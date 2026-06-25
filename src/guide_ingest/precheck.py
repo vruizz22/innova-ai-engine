@@ -13,8 +13,6 @@ from src.shared.settings import get_settings
 
 logger = structlog.get_logger()
 
-_MODEL = "gemini-2.0-flash"
-
 _PRECHECK_PROMPT = """\
 You are triaging a Chilean K-12 math worksheet PDF before an expensive extraction step.
 Inspect the document and return ONLY a JSON object (no markdown) with:
@@ -25,19 +23,41 @@ Inspect the document and return ONLY a JSON object (no markdown) with:
 """
 
 
+def _strip_json_fences(text: str) -> str:
+    """Gemini often wraps JSON in ```json ... ``` fences (or adds a prose
+    preamble) despite the prompt. Pull out the first balanced JSON object so
+    `json.loads` does not choke on the markdown."""
+    s = text.strip()
+    if s.startswith("```"):
+        # drop the opening fence (``` or ```json) and the trailing fence
+        s = s.split("\n", 1)[1] if "\n" in s else s
+        if s.rstrip().endswith("```"):
+            s = s.rstrip()[:-3]
+        s = s.strip()
+    # fall back to the outermost {...} span if there is still surrounding prose
+    if not s.startswith("{"):
+        start = s.find("{")
+        end = s.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            s = s[start : end + 1]
+    return s
+
+
 def _parse(text: str, trace_id: str) -> PrecheckResult:
     try:
-        raw = cast(dict[str, object], json.loads(text))
+        raw = cast(dict[str, object], json.loads(_strip_json_fences(text)))
     except Exception:
-        logger.warning("guide_precheck_parse_failed", trace_id=trace_id)
-        return PrecheckResult(
-            kind=PdfKind.MIXED,
-            quality=0.0,
-            notes="precheck parse failed")
+        # Log a truncated snippet of what Gemini actually returned so a parse
+        # failure is diagnosable instead of silently collapsing to quality 0.
+        logger.warning(
+            "guide_precheck_parse_failed",
+            trace_id=trace_id,
+            raw_preview=(text or "")[:300],
+        )
+        return PrecheckResult(kind=PdfKind.MIXED, quality=0.0, notes="precheck parse failed")
 
     kind_value = str(raw.get("kind", "MIXED")).upper()
-    kind = PdfKind(
-        kind_value) if kind_value in PdfKind.__members__ else PdfKind.MIXED
+    kind = PdfKind(kind_value) if kind_value in PdfKind.__members__ else PdfKind.MIXED
     pages = [
         int(p)
         for p in cast(list[object], raw.get("content_pages") or [])
@@ -46,36 +66,34 @@ def _parse(text: str, trace_id: str) -> PrecheckResult:
     quality = max(0.0, min(1.0, float(cast(float, raw.get("quality") or 0.0))))
     notes_raw = raw.get("notes")
     notes = str(notes_raw) if notes_raw else None
-    return PrecheckResult(
-        kind=kind,
-        content_pages=pages,
-        quality=quality,
-        notes=notes)
+    return PrecheckResult(kind=kind, content_pages=pages, quality=quality, notes=notes)
 
 
 class GeminiPrecheck:
-    """`PdfPrecheckPort` via Gemini 2.0 Flash — cheap kind/quality triage (ADR v9 A6.1)."""
+    """`PdfPrecheckPort` via Gemini Flash — cheap kind/quality triage (ADR v9 A6.1)."""
 
     def __init__(self) -> None:
         settings = get_settings()
-        self._client = genai.Client(
-            api_key=settings.gemini_api_key)  # type: ignore[attr-defined]
+        self._client = genai.Client(api_key=settings.gemini_api_key)  # type: ignore[attr-defined]
+        self._model = settings.gemini_model
         self._paused_param = settings.ssm_guides_ingest_paused_param
 
-    async def precheck(
-            self,
-            pdf_bytes: bytes,
-            *,
-            trace_id: str = "") -> PrecheckResult:
+    async def precheck(self, pdf_bytes: bytes, *, trace_id: str = "") -> PrecheckResult:
         ensure_not_paused(self._paused_param, trace_id=trace_id)
         response = await self._client.aio.models.generate_content(  # type: ignore[attr-defined]
-            model=_MODEL,
+            model=self._model,
             contents=[
                 _PRECHECK_PROMPT,
                 genai_types.Part.from_bytes(  # type: ignore[attr-defined]
                     data=pdf_bytes, mime_type="application/pdf"
                 ),
             ],
+            # Force a raw JSON object (no markdown fences / prose) so _parse is
+            # reliable across Gemini model versions. temperature=0 for stable triage.
+            config=genai_types.GenerateContentConfig(  # type: ignore[attr-defined]
+                response_mime_type="application/json",
+                temperature=0.0,
+            ),
         )
         result = _parse(response.text or "", trace_id)
         logger.info(

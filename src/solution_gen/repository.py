@@ -15,15 +15,9 @@ from src.solution_gen.schemas import (
 class DbConn(Protocol):
     """The asyncpg connection bits we use (untyped upstream — adapt at the handler)."""
 
-    async def fetch(self,
-                    query: str,
-                    *args: object) -> Sequence[Mapping[str,
-                                                       object]]: ...
+    async def fetch(self, query: str, *args: object) -> Sequence[Mapping[str, object]]: ...
 
-    async def fetchrow(self,
-                       query: str,
-                       *args: object) -> Mapping[str,
-                                                 object] | None: ...
+    async def fetchrow(self, query: str, *args: object) -> Mapping[str, object] | None: ...
 
     async def fetchval(self, query: str, *args: object) -> object: ...
 
@@ -45,8 +39,11 @@ SELECT g.id            AS guide_id,
  WHERE g.id = $1
 """
 
-# `$2::uuid IS NULL` keeps it a single query for both the whole guide and the
-# single-question re-generation path.
+# Prisma models these ids as `String @id` (text columns, not @db.Uuid), so the
+# param is cast to ::text — NOT ::uuid. A ::uuid cast type-checks `q.id = $2::uuid`
+# as `text = uuid` at PARSE time (even though the NULL branch never executes at
+# runtime) and the whole statement fails with "operator does not exist: text = uuid".
+# `$2::text IS NULL` still gives asyncpg a concrete type for the NULL (whole-guide) path.
 _GUIDE_QUESTIONS = """
 SELECT q.id                       AS question_id,
        q.sequence                 AS sequence,
@@ -59,26 +56,27 @@ SELECT q.id                       AS question_id,
   FROM guide_questions q
   LEFT JOIN guide_solutions s ON s.guide_question_id = q.id
  WHERE q.guide_id = $1
-   AND ($2::uuid IS NULL OR q.id = $2::uuid)
+   AND ($2::text IS NULL OR q.id = $2::text)
  GROUP BY q.id
  ORDER BY q.sequence
 """
 
-_TOPIC_CANDIDATES = """
-SELECT t.code         AS code,
-       t.name         AS name,
-       t.id           AS topic_id,
-       t.domain_id    AS domain_id,
-       t.subdomain_id AS subdomain_id,
-       d.code         AS domain_code,
-       u.grade_level  AS grade_level
-  FROM topics t
-  JOIN units u      ON u.id = t.unit_id
-  JOIN curricula cur ON cur.id = u.curriculum_id
-  LEFT JOIN domains d ON d.id = t.domain_id
- WHERE cur.subject_id = $1
-   AND u.grade_level BETWEEN $2 AND $3
- ORDER BY u.grade_level, u.sequence, t.code
+# v9.1: classify against the error TAXONOMY (domain/subdomain), not the sparse,
+# hand-seeded `topics` table. domains/subdomains are the same buckets that organize
+# the ErrorTag catalog, so every question resolves to a real domain_id (-> ACTIVE
+# error codes) regardless of whether a curriculum topic was ever seeded for its grade.
+# `code` is qualified (DOMAIN/SUBDOMAIN) so it is globally unique for the LLM to pick;
+# `topic_id` is a best-effort link to a curriculum topic when one maps to the subdomain.
+_TAXONOMY_CANDIDATES = """
+SELECT d.code AS domain_code,
+       d.id   AS domain_id,
+       s.code AS subdomain_code,
+       s.name AS subdomain_name,
+       s.id   AS subdomain_id,
+       (SELECT t.id FROM topics t WHERE t.subdomain_id = s.id LIMIT 1) AS topic_id
+  FROM subdomains s
+  JOIN domains d ON d.id = s.domain_id
+ ORDER BY d.code, s.code
 """
 
 _ACTIVE_ERROR_CODES = """
@@ -163,12 +161,9 @@ class AsyncpgSolutionRepository:
                 label=_opt_str(row["label"]),
                 statement_latex=str(row["statement_latex"]),
                 provided_answer=_opt_str(row["provided_answer"]),
-                provided_solution_latex=_opt_str(
-                    row["provided_solution_latex"]),
+                provided_solution_latex=_opt_str(row["provided_solution_latex"]),
                 points=float(row["points"]),  # type: ignore[arg-type]
-                current_version=int(
-                    row["current_version"]),
-                # type: ignore[arg-type]
+                current_version=int(row["current_version"]),  # type: ignore[arg-type]
             )
             for row in rows
         ]
@@ -179,27 +174,21 @@ class AsyncpgSolutionRepository:
             grade_level=int(header["grade_level"]),  # type: ignore[arg-type]
             teacher_id=str(header["teacher_id"]),
             title=str(header["title"]),
-            question_count=int(
-                header["question_count"]),
-            # type: ignore[arg-type]
+            question_count=int(header["question_count"]),  # type: ignore[arg-type]
             questions=questions,
         )
 
-    async def fetch_topic_candidates(
-        self, subject_id: str, grade_min: int, grade_max: int
-    ) -> list[TopicCandidate]:
-        rows = await self._conn.fetch(
-            _TOPIC_CANDIDATES, subject_id, grade_min, grade_max
-        )
+    async def fetch_taxonomy_candidates(self, grade_level: int) -> list[TopicCandidate]:
+        rows = await self._conn.fetch(_TAXONOMY_CANDIDATES)
         return [
             TopicCandidate(
-                code=str(row["code"]),
-                name=str(row["name"]),
-                topic_id=str(row["topic_id"]),
+                code=f"{row['domain_code']}/{row['subdomain_code']}",
+                name=str(row["subdomain_name"]),
+                topic_id=_opt_str(row["topic_id"]),
                 domain_id=_opt_str(row["domain_id"]),
                 subdomain_id=_opt_str(row["subdomain_id"]),
                 domain_code=_opt_str(row["domain_code"]),
-                grade_level=int(row["grade_level"]),  # type: ignore[arg-type]
+                grade_level=grade_level,
             )
             for row in rows
         ]

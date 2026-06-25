@@ -37,9 +37,7 @@ class _FakeConn:
         self._rows = rows
         self.calls = 0
 
-    async def fetch(
-        self, query: str, *args: object
-    ) -> Sequence[Mapping[str, object]]:
+    async def fetch(self, query: str, *args: object) -> Sequence[Mapping[str, object]]:
         self.calls += 1
         return self._rows
 
@@ -81,11 +79,7 @@ def test_get_domain_catalog_caches_within_ttl() -> None:
 def test_get_domain_catalog_refetches_after_ttl() -> None:
     conn = _FakeConn(_ROWS)
     asyncio.run(get_domain_catalog(conn, "dom-uuid-1", now=0.0))
-    asyncio.run(
-        get_domain_catalog(
-            conn,
-            "dom-uuid-1",
-            now=4000.0))  # > 3600s TTL
+    asyncio.run(get_domain_catalog(conn, "dom-uuid-1", now=4000.0))  # > 3600s TTL
     assert conn.calls == 2
 
 

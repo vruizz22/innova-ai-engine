@@ -8,8 +8,7 @@ def _norm(text: str) -> str:
     return " ".join(text.lower().split())
 
 
-def merge_chunks(
-        chunk_results: list[ExtractGuideResult]) -> list[MergedQuestion]:
+def merge_chunks(chunk_results: list[ExtractGuideResult]) -> list[MergedQuestion]:
     """Flatten per-chunk extractions into the final ordered question list, resolving the
     1-page overlap between chunks (ADR v9 A6.1):
 
@@ -39,9 +38,7 @@ def merge_chunks(
                     if previous.provided_solution_latex is None:
                         previous.provided_solution_latex = question.provided_solution_latex
                     continue
-                if _norm(
-                        question.statement_text) == _norm(
-                        previous.statement_text):
+                if _norm(question.statement_text) == _norm(previous.statement_text):
                     continue
 
             merged.append(

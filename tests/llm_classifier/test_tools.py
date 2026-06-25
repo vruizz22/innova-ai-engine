@@ -29,9 +29,9 @@ def test_build_classify_tool_enum_is_domain_catalog_plus_specials() -> None:
     codes = ["FRACT_MUL_CROSS_MULTIPLIES_G6", "FRACT_DIV_NO_RECIPROCAL_G7"]
     tool = build_classify_tool(codes)
     assert tool["name"] == "classify_errors"
-    enum_vals = tool["input_schema"]["properties"]["classifications"]["items"][
-        "properties"
-    ]["error_type"]["enum"]
+    enum_vals = tool["input_schema"]["properties"]["classifications"]["items"]["properties"][
+        "error_type"
+    ]["enum"]
     for code in codes:
         assert code in enum_vals
     assert "CORRECT" in enum_vals
