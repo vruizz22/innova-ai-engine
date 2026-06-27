@@ -1,540 +1,353 @@
 # innova-ai-engine
 
-> Motor de Knowledge Tracing y Clasificación de Errores para la plataforma **Innova EdTech**.
+> Knowledge-tracing, error-classification and document-AI engine for the **SuperProfe / Innova** platform.
+> Live in production at **https://ai.superprofes.app**.
 >
-> Python 3.11 · uv · Pydantic v2 · Anthropic Claude Haiku 4.5 · Gemini 2.0 Flash · scipy · numpy · asyncpg · structlog
+> Python 3.11 (strict) · uv · Pydantic v2 · Anthropic Claude · Google Gemini · scipy · numpy · asyncpg · structlog
 >
-> **Sin PyTorch. Sin Scikit-Learn. Sin Modal.com en MVP.**
+> **No PyTorch. No scikit-learn.** Deterministic math (BKT/IRT) on scipy/numpy; everything else via hosted LLMs.
 
 ---
 
-## Tabla de contenidos
+## Table of contents
 
-- [innova-ai-engine](#innova-ai-engine)
-  - [Tabla de contenidos](#tabla-de-contenidos)
-  - [1. Visión general](#1-visión-general)
-  - [2. Arquitectura del pipeline](#2-arquitectura-del-pipeline)
-  - [3. Stack tecnológico](#3-stack-tecnológico)
-  - [4. Fundamento teórico](#4-fundamento-teórico)
-    - [Bayesian Knowledge Tracing (BKT)](#bayesian-knowledge-tracing-bkt)
-    - [Notas de implementación en Python](#notas-de-implementación-en-python)
-    - [Item Response Theory — 2PL (IRT)](#item-response-theory--2pl-irt)
-    - [LLM Classifier](#llm-classifier)
-    - [OCR Vision](#ocr-vision)
-  - [5. Estructura del repositorio](#5-estructura-del-repositorio)
-  - [6. Metodología y flujo de trabajo](#6-metodología-y-flujo-de-trabajo)
-    - [6.1 GSD / BMAD](#61-gsd--bmad)
-    - [6.2 AI usage logs](#62-ai-usage-logs)
-    - [6.3 Gitflow](#63-gitflow)
-    - [6.4 Reglas de código obligatorias](#64-reglas-de-código-obligatorias)
-  - [7. Variables de entorno](#7-variables-de-entorno)
-  - [8. Setup local](#8-setup-local)
-    - [Prerrequisitos](#prerrequisitos)
-    - [Pasos](#pasos)
-    - [Ejecutar un handler localmente](#ejecutar-un-handler-localmente)
-    - [Comandos frecuentes](#comandos-frecuentes)
-  - [9. Tests y cobertura](#9-tests-y-cobertura)
-    - [Suites clave](#suites-clave)
-  - [10. Despliegue (AWS Lambda container images)](#10-despliegue-aws-lambda-container-images)
-    - [Prerrequisitos AWS](#prerrequisitos-aws)
-    - [Build y deploy de una imagen](#build-y-deploy-de-una-imagen)
-    - [Build todas las imágenes](#build-todas-las-imágenes)
-    - [CI/CD (GitHub Actions)](#cicd-github-actions)
-  - [11. Cost engineering](#11-cost-engineering)
-  - [12. Privacidad y cumplimiento NNA](#12-privacidad-y-cumplimiento-nna)
-  - [13. Roadmap](#13-roadmap)
-  - [14. Recursos](#14-recursos)
-  - [15. Licencia](#15-licencia)
+- [1. Overview](#1-overview)
+- [2. Pipeline architecture](#2-pipeline-architecture)
+- [3. Tech stack](#3-tech-stack)
+- [4. Theoretical foundation](#4-theoretical-foundation)
+- [5. Repository structure](#5-repository-structure)
+- [6. Workers (Lambda functions)](#6-workers-lambda-functions)
+- [7. Environment variables](#7-environment-variables)
+- [8. Local setup](#8-local-setup)
+- [9. Testing and coverage](#9-testing-and-coverage)
+- [10. Production deployment](#10-production-deployment)
+- [11. Cost control](#11-cost-control)
+- [12. Methodology and workflow](#12-methodology-and-workflow)
+- [13. License](#13-license)
 
 ---
 
-## 1. Visión general
+## 1. Overview
 
-Este repositorio aloja todos los **workers de ML/IA** del ecosistema Innova. Cada worker es un **AWS Lambda container image** independientemente deployable:
+This repository holds the **asynchronous AI workers** of SuperProfe. The `innova-backend-serverless` API
+enqueues work to AWS SQS and shares S3 buckets and a Postgres database; this engine consumes those events,
+calls the appropriate model, and writes results back to Postgres.
 
-| Worker | Trigger | Función |
-|--------|---------|---------|
-| `ocr_worker` | S3 event (upload JPG) | Extrae pasos matemáticos de foto escaneada — Gemini primary, Claude fallback |
-| `llm_consumer` | SQS Standard (batch 20) | Clasifica errores `UNCLASSIFIED` con Claude Haiku 4.5 + prompt caching |
-| `nightly_bkt` | EventBridge cron 07:00 UTC | Calibra parámetros BKT por skill (grid search) |
-| `nightly_irt` | EventBridge cron 07:15 UTC | Calibra parámetros IRT 2PL por item (scipy L-BFGS-B) |
-| `telemetry_persister` | SQS FIFO (attempt-stream) | Persiste eventos raw a MongoDB + S3 |
+It does several families of work:
+
+| Family | What it does |
+|--------|--------------|
+| Knowledge tracing | Nightly **BKT** parameter calibration and **IRT 2PL** item calibration |
+| Error classification | Classifies `UNCLASSIFIED` attempts against a 2,600+ error taxonomy (Claude) |
+| Document AI (guides) | PDF ingest, solution-key generation, handwritten-submission grading |
+| Vision OCR | Reads handwritten student work (Gemini + Claude vision) |
+| Exercise generation | Generates new exercises for a topic on demand (Claude) |
+| Alerting & evaluation | Hourly at-risk detectors; offline grading-quality evaluation |
+
+Each worker follows **Clean Architecture** (domain → ports → adapters → handler): pure domain logic, I/O
+behind ports (Postgres, SQS, S3, Anthropic, Gemini), and a thin Lambda handler that wires them together.
 
 ---
 
-## 2. Arquitectura del pipeline
+## 2. Pipeline architecture
 
 ```mermaid
-flowchart TB
-  subgraph L1["Layer 1 - OCR (S3 trigger)"]
-    S3_UP[("S3 uploads\nanonymized JPGs")]
-    SQS_OCR["SQS Standard\nocr-queue"]
-    OCW["OCR Worker\nGemini 2.0 Flash\nClaude Vision fallback"]
-    S3_UP --> SQS_OCR --> OCW
+flowchart LR
+  subgraph BACK["innova-backend-serverless"]
+    API["API / producers"]
   end
 
-  subgraph L2["Layer 2 - LLM Classification (SQS trigger)"]
-    SQS_LLM["SQS Standard\nllm-classify-queue\nBatchSize=20"]
-    LCW["LLM Classifier\nClaude Haiku 4.5\nbatch 20, prompt cache, tool_use"]
-    SQS_LLM --> LCW
+  subgraph SQS["AWS SQS (owned by backend stack)"]
+    LLMQ["llm-classify-queue"]
+    OCRQ["ocr-queue"]
+    GINQ["guide-ingest-queue"]
+    SOLQ["solution-generation-queue"]
+    SUBQ["submission-grade-queue"]
+    REPRO["attempt-reprocess-queue"]
   end
 
-  subgraph L3["Layer 3 - Nightly Calibration (cron UTC 07:00)"]
-    CRON_BKT["EventBridge cron 0 7"]
-    CRON_IRT["EventBridge cron 15 7"]
-    BKT_CAL["BKT Calibrator\nbrute-force grid\np_L0 p_T p_S p_G"]
-    IRT_CAL["IRT Calibrator\n2PL via scipy L-BFGS-B\na and b per item"]
-    CRON_BKT --> BKT_CAL
-    CRON_IRT --> IRT_CAL
+  subgraph ENGINE["innova-ai-engine (Lambda container images)"]
+    LCW["llmClassifier"]
+    OCW["ocrWorker"]
+    GIW["guideIngest"]
+    SGW["solutionGenerator"]
+    SUBW["submissionGrader"]
+    EXW["exerciseGenerator"]
+    BKTW["nightlyBkt (cron)"]
+    IRTW["nightlyIrt (cron)"]
+    ALW["hourlyAlerts (cron)"]
+    HLT["health (HTTP)"]
   end
 
-  subgraph L4["Layer 4 - Telemetry (SQS FIFO)"]
-    SQS_FIFO["SQS FIFO\nattempt-stream"]
-    TPW["Telemetry Persister\nbatch write"]
-    SQS_FIFO --> TPW
+  subgraph EXT["Model providers"]
+    ANTH["Anthropic Claude (Haiku/Sonnet)"]
+    GEM["Google Gemini (vision + PDF precheck)"]
   end
 
-  PG[("Neon Postgres\nAttempts, Mastery, Items")]
-  MONGO[("MongoDB Atlas M0\nattempt_events")]
-  S3L[("S3 raw events lake")]
+  subgraph STORE["Shared storage"]
+    PG[("Supabase Postgres")]
+    S3G[("S3 guides")]
+    S3S[("S3 submissions")]
+  end
 
-  EXT_ANTH["Anthropic Haiku 4.5"]
-  EXT_GEM["Gemini 2.0 Flash"]
-
-  OCW --> EXT_GEM
-  OCW -.->|fallback confidence lt 0.7| EXT_ANTH
-  OCW --> PG
-  LCW --> EXT_ANTH
-  LCW --> PG
-  BKT_CAL --> PG
-  IRT_CAL --> PG
-  TPW --> MONGO
-  TPW --> S3L
+  API --> LLMQ --> LCW --> ANTH
+  API --> OCRQ --> OCW --> GEM
+  API --> GINQ --> GIW --> GEM
+  GIW --> SOLQ --> SGW --> ANTH
+  API --> SUBQ --> SUBW --> ANTH
+  SUBW --> REPRO --> API
+  API --> EXW --> ANTH
+  GIW --> S3G
+  SUBW --> S3S
+  LCW & GIW & SGW & SUBW & EXW & BKTW & IRTW & ALW --> PG
 ```
 
-> Guía Draw.io formal (UML con lollipop/socket interfaces, NFR notes): `docs/drawio/03-how-to-draw-knowledge-tracing-pipeline.md`
+Guides flow (v9): `guideIngest` extracts questions from the PDF (Gemini precheck → Claude extract → figures
+via pypdfium2) → publishes to `solution-generation` → `solutionGenerator` builds the step-by-step key and sets
+the guide to `REVIEW` → after the student uploads photos, `submissionGrader` transcribes and grades them and
+republishes to `attempt-reprocess` so the backend turns them into attempts.
 
 ---
 
-## 3. Stack tecnológico
+## 3. Tech stack
 
-| Capa | Tecnología | Versión | Razón |
-|------|-----------|---------|-------|
-| Lenguaje | Python | 3.11 | `match` statements, `from __future__ import annotations` |
-| Package manager | uv | 0.4+ | Ultrafast, lockfile reproducible, reemplaza pip/venv |
-| Type checker | pyright | strict | Zero warnings en CI — único gatekeeper de tipos |
-| Linter/Formatter | ruff | 0.4+ | Reemplaza flake8+black+isort en un binario |
-| Schemas | Pydantic v2 | 2.x | Validación en runtime, `model_config`, no `dict[str, Any]` |
-| ML compute | numpy + scipy | latest | BKT grid search, IRT L-BFGS-B — sin GPU |
-| LLM SDK | anthropic | ≥0.40 | `cache_control` ephemeral, `tool_use` forzado |
-| Vision SDK | google-generativeai | ≥0.8 | Gemini 2.0 Flash (pendiente migración a `google-genai` SDK en TODO-AI-1) |
-| DB async | asyncpg | latest | Pool async para Lambda handlers |
-| Logging | structlog | latest | JSON, `trace_id` propagation, sin `print()` |
-| Tests | pytest + hypothesis + moto | ≥7, ≥6 | Property-based BKT/IRT, moto para SQS/S3 |
-| Deploy | AWS Lambda container | — | Imagen Docker por handler, ECR |
-| Infra | AWS CDK / Serverless | — | EventBridge crons, SQS event sources |
-
-**Explícitamente excluido:** scikit-learn, torch, tensorflow, Modal.com (ADR-002).
+| Concern | Choice |
+|---------|--------|
+| Language | Python 3.11, `from __future__ import annotations`, full type hints |
+| Packaging | `uv` (`pyproject.toml`, `uv.lock`) |
+| Config / schemas | Pydantic v2 + `pydantic-settings` |
+| Math | scipy + numpy (BKT grid search, IRT 2PL MLE) |
+| LLM | `anthropic` SDK (Claude Haiku / Sonnet), prompt caching, forced tool use |
+| Vision / PDF | `google-genai` (Gemini 2.5 Flash), `pillow`, `pypdfium2` |
+| DB | `asyncpg` (direct, no ORM, async pool) |
+| AWS | `boto3` (SQS, S3, SSM) |
+| Logging | `structlog` (JSON) with trace ids and cost/token accounting |
+| Lint / types | `ruff`, `pyright` (strict mode, zero errors) |
+| Tests | `pytest` (+ `pytest-asyncio`, `hypothesis`, `moto`) |
+| Deploy | Serverless Framework + Lambda **container images** (`Dockerfile.lambda`) |
 
 ---
 
-## 4. Fundamento teórico
+## 4. Theoretical foundation
 
-### Bayesian Knowledge Tracing (BKT)
+**Bayesian Knowledge Tracing (BKT).** Corbett & Anderson (1995). Four parameters per topic
+(`p_l0, p_transit, p_slip, p_guess`, with `p_slip + p_guess < 1`). The backend does the online update on each
+attempt; this engine **recalibrates** the parameters nightly via brute-force grid search (step 0.05),
+minimizing negative log-likelihood over attempt history, and writes them back to Postgres.
 
-Corbett & Anderson (1995). Modelo de 4 parámetros por (alumno, skill):
+**Item Response Theory (2PL IRT).** Lord (1980). Each exercise has discrimination `a ∈ [0.5, 3.0]` and
+difficulty `b ∈ [-3, 3]`, fit nightly with `scipy.optimize` (L-BFGS-B, MLE) once it has ≥50 attempts. The
+backend then uses Fisher information `I(θ) = a²·P(θ)·(1−P(θ))` to pick the next item.
 
-1. **Probabilidad de conocimiento dado un acierto ($obs = 1$):**
-$$P(L_n | obs=1) = \frac{(1 - p_{slip}) \cdot P(L_{n-1})}{(1 - p_{slip}) \cdot P(L_{n-1}) + p_{guess} \cdot (1 - P(L_{n-1}))}$$
+**LLM error classifier.** Attempts the rule engine can't handle are grouped by domain and classified by
+Claude Haiku in batches of 20 against a proprietary taxonomy of 2,600+ procedural errors aligned to the
+Chilean curriculum (17 domains). Prompts use ephemeral caching on the system block and forced `tool_use`;
+results carry token/cost metadata. No PII is sent (only `attempt_id`, steps, topic).
 
-1. **Probabilidad de conocimiento dado un error ($obs = 0$):**
-   $$P(L_n | obs=0) = \frac{P(L_{n-1}) \cdot p_{slip}}{P(L_{n-1}) \cdot p_{slip} + (1 - P(L_{n-1})) \cdot (1 - p_{guess})}$$
-
-1. **Transición de aprendizaje (Learning Transition):**
-$$P(L_n) = P(L_{n-1} | obs) + (1 - P(L_{n-1} | obs)) \cdot p_{transit}$$
-
----
-
-### Notas de implementación en Python
-
-Para mantener la consistencia con el **Pipeline BKT + IRT**
-
-- **$P(L_n)$**: Representa el *mastery* o dominio actual del estudiante
-- **$p_{slip}$**: Probabilidad de cometer un error conociendo la regla
-- **$p_{guess}$**: Probabilidad de acertar por azar sin conocer la regla
-- **$p_{transit}$**: Probabilidad de aprender el procedimiento tras una oportunidad de práctica
-
-Esta lógica es la que permite que el **Dashboard del Profesor** identifique si un error es un "descuido" (slip) o una falta real de conocimiento antes de la prueba
-
-Defaults iniciales (Corbett & Anderson 1995): `p_L0=0.3, p_T=0.1, p_S=0.1, p_G=0.2`.
-
-Calibración nocturna: grid search exhaustivo sobre `[0.05, 0.95]` step `0.05` → ~130K combinaciones por skill (skip si `p_slip + p_guess ≥ 1.0`). Minimiza negative log-likelihood agrupando intentos por estudiante. Escribe parámetros de vuelta a `Postgres.skill_bkt_params`.
-
-> **Nota de identifiabilidad:** `p_L0` y `p_transit` son confundidos en datos de secuencia única (Corbett & Anderson 1995). Los parámetros medibles (`p_slip`, `p_guess`) son los que el grid search recupera con mayor confiabilidad.
-
-### Item Response Theory — 2PL (IRT)
-
-Lord (1980). Probabilidad de respuesta correcta:
-
-```
-P(correct | theta) = 1 / (1 + exp(-a * (theta - b)))
-```
-
-$$P(correct | \theta) = \frac{1}{1 + e^{-a(\theta - b)}}$$
-
-- `a` — discriminación (diferencia alumnos que saben de los que no)
-- `b` — dificultad (theta donde P=0.5)
-- $\theta$ — dominio del alumno (estimado por BKT)
-
-Fit nightly via `scipy.optimize.minimize` con `method='L-BFGS-B'`. Mínimo 50 intentos por item para calibrar; bajo ese umbral, defaults `a=1.0, b=0.0`.
-
-Selector de item: Fisher information $I(\theta) = a^2 \cdot P(\theta) \cdot (1 - P(\theta))$. Pica el item que maximiza información en el nivel de dominio actual del alumno.
-
-### LLM Classifier
-
-Errores `UNCLASSIFIED` (15–25% del total) se clasifican con **Claude Haiku 4.5**:
-
-- `cache_control: {"type": "ephemeral"}` en el system prompt (ontología + few-shots → ~80% cache hit)
-- `tool_choice: {"type": "tool", "name": "classify_errors"}` — forzado, nunca "auto"
-- Batch de 20 intentos por llamada → amortiza costo de prompt
-- Costo estimado: $0.06/1K intentos clasificados
-
-### OCR Vision
-
-Gemini 2.0 Flash como primary (free tier: 1M imágenes/mes). Claude Haiku Vision como fallback cuando `overall_confidence < 0.7`. Implementado mediante `MathOCRPort` (Protocol), permitiendo swap sin tocar orchestrator.
-
-Literatura completa: `.github/instructions/02-estado-del-arte.md`.
+**OCR vision.** Handwritten work is read with Gemini first (`GEMINI_MODEL`, default `gemini-2.5-flash`) and
+escalated to Claude vision when confidence is below threshold. Output is structured LaTeX steps with a
+confidence score.
 
 ---
 
-## 5. Estructura del repositorio
+## 5. Repository structure
 
 ```
 innova-ai-engine/
-├── pyproject.toml              # uv deps, ruff config, pyright config, pytest config
-├── uv.lock
-├── .python-version             # 3.11
 ├── src/
-│   ├── bkt/
-│   │   ├── update.py           # closed-form Bayesian update (reference)
-│   │   ├── calibrate.py        # brute-force grid search
-│   │   └── schemas.py          # BktParams(BaseModel)
-│   ├── irt/
-│   │   ├── two_pl.py           # scipy L-BFGS-B fit
-│   │   ├── fisher.py           # Fisher information item picker
-│   │   └── schemas.py          # IrtItemParams(BaseModel)
-│   ├── llm_classifier/
-│   │   ├── prompts.py          # versioned system + few-shots (cached block)
-│   │   ├── tools.py            # tool_use schema: classify_errors
-│   │   ├── client.py           # Anthropic wrapper con cache_control
-│   │   ├── batch.py            # 20x batching logic + DB write
-│   │   └── schemas.py          # AttemptClassification, ClassificationResult
-│   ├── ocr/
-│   │   ├── ports.py            # MathOCRPort Protocol
-│   │   ├── gemini_adapter.py   # implementa MathOCRPort
-│   │   ├── claude_adapter.py   # implementa MathOCRPort (fallback)
-│   │   ├── orchestrator.py     # confidence-based escalation
-│   │   └── schemas.py          # OcrResult, OcrProvider
-│   ├── pipeline/
-│   │   ├── nightly_bkt.py      # Lambda handler (EventBridge)
-│   │   ├── nightly_irt.py      # Lambda handler (EventBridge)
-│   │   ├── llm_consumer.py     # Lambda handler (SQS Standard)
-│   │   └── ocr_worker.py       # Lambda handler (S3 event)
-│   ├── observability/
-│   │   ├── tracing.py          # bind_trace_id() via structlog.contextvars
-│   │   └── logging.py          # structlog JSON config
-│   └── shared/
-│       ├── postgres.py         # asyncpg connection pool
-│       └── settings.py         # Pydantic BaseSettings
-├── tests/
-│   ├── conftest.py
-│   ├── bkt/
-│   │   ├── test_update.py      # property-based (hypothesis)
-│   │   └── test_calibrate.py   # recovery test 1000 attempts
-│   ├── irt/
-│   │   ├── test_two_pl.py      # recovery test synthetic 2PL
-│   │   └── test_fisher.py
-│   ├── llm_classifier/
-│   │   ├── test_client.py      # cache_control + tool_choice assertions
-│   │   └── test_batch.py
-│   ├── ocr/
-│   │   ├── test_orchestrator.py
-│   │   └── test_gemini_adapter.py  # includes @pytest.mark.smoke
-│   └── pipeline/
-│       ├── test_llm_consumer.py    # moto SQS
-│       └── test_ocr_worker.py      # moto S3
-├── scripts/
-│   └── build_lambda_images.py
-└── .github/
-    └── workflows/
-        ├── ci.yml
-        └── deploy-lambdas.yml
+│   ├── bkt/                 # nightly BKT calibration (grid search) + reference online update
+│   ├── irt/                 # nightly IRT 2PL calibration + Fisher information
+│   ├── llm_classifier/      # UNCLASSIFIED attempts → Claude → ErrorTag (batch 20, cached, tool_use)
+│   ├── ocr/                 # vision OCR via MathOCRPort (Gemini → Claude escalation)
+│   ├── guide_ingest/        # A6: PDF → questions (Gemini precheck → Claude → figures via pypdfium2)
+│   ├── solution_gen/        # A7: questions → step-by-step solution key
+│   ├── submission_grader/   # A8: student photos → transcribe + grade → attempt-reprocess
+│   ├── exercise_generator/  # generate new exercises for a topic
+│   ├── adhoc_solver/        # A10: solve a scan with no guide context (code present, not wired)
+│   ├── alerts/              # A9.2 hourly at-risk detectors
+│   ├── grading_eval/        # A9.1 offline grading-quality scorer + CLI gate
+│   ├── observability/       # structlog config, trace ids, cost/token accounting
+│   ├── pipeline/            # Lambda handlers (one per worker) wiring domain + adapters
+│   └── shared/              # ports, adapters (asyncpg/SQS/S3/Anthropic/Gemini), settings
+├── tests/                   # pytest suites (unit + property + moto)
+├── out/                     # generated error catalog (catalog/, error_catalog.jsonl)
+├── Dockerfile.lambda        # Lambda container image (native deps: pypdfium2, pillow)
+├── serverless.yml           # 10 functions (see §6)
+├── pyproject.toml           # uv project + ruff + pyright + pytest config
+└── README.md
 ```
+
+Each worker package separates `domain.py` (pure logic), `ports.py`/protocols and adapters, with the
+deployable handler under `src/pipeline/`. Internal imports always use the `src.` prefix.
 
 ---
 
-## 6. Metodología y flujo de trabajo
+## 6. Workers (Lambda functions)
 
-### 6.1 GSD / BMAD
+`serverless.yml` defines ten functions:
 
-Artefactos en `docs/` (repo raíz `innova/`):
+| Function | Trigger | Purpose |
+|----------|---------|---------|
+| `health` | HTTP (`ai.superprofes.app/health`) | Liveness probe |
+| `llmClassifier` | SQS `llm-classify-queue` (batch 20) | Classify unclassified attempts (Claude) |
+| `ocrWorker` | SQS `ocr-queue` | OCR handwritten work (Gemini → Claude) → publish to `attempt-reprocess` |
+| `guideIngest` | SQS `guide-ingest-queue` | Extract questions from a worksheet PDF |
+| `solutionGenerator` | SQS `solution-generation-queue` | Build the step-by-step solution key |
+| `submissionGrader` | SQS `submission-grade-queue` | Transcribe + grade student photos |
+| `exerciseGenerator` | SQS / invoke | Generate new exercises for a topic |
+| `nightlyBkt` | EventBridge `cron(0 7 * * ? *)` | Recalibrate BKT parameters |
+| `nightlyIrt` | EventBridge `cron(15 7 * * ? *)` | Recalibrate IRT item parameters |
+| `hourlyAlerts` | EventBridge `cron(0 * * * ? *)` | Detect at-risk students, raise alerts |
 
-| Archivo | Propósito |
-|---------|-----------|
-| `docs/roadmap.md` | Milestones M0–M6 con fechas |
-| `docs/architecture.md` | ADRs: ADR-001 (hybrid AI), ADR-002 (no Modal), ADR-005 (Gemini OCR) |
-| `docs/requirements.md` | NFRs: cobertura ≥75%, latencia OCR <3s, cost <$80/mes |
-
-### 6.2 AI usage logs
-
-Cada sesión de Claude Code que genera cambios en este repo → log en `docs/ai-logs/YYYY-MM-DD-<tema>.md`.
-
-### 6.3 Gitflow
-
-```
-main (protegida) <── feature/<scope>
-```
-
-- Conventional Commits en inglés: `feat(bkt): implement grid search calibration`
-- ≥2 reviewers, CI verde (pyright + ruff + pytest --cov-fail-under=75)
-
-### 6.4 Reglas de código obligatorias
-
-- `from __future__ import annotations` en todos los módulos
-- `NUNCA dict[str, Any]` sin justificación en comentario
-- `NUNCA print()` — solo `structlog`
-- `NUNCA llamada LLM/OCR sin cache_control y killswitch check`
-- `NUNCA DB call síncrona en handlers async`
-- `trace_id` propagado desde SQS MessageAttributes en todos los handlers
+> `adhoc_solver` (A10) exists in code but is **not yet wired** as a function in `serverless.yml`; it is a
+> follow-up if ad-hoc scan solving is needed in prod.
 
 ---
 
-## 7. Variables de entorno
+## 7. Environment variables
 
-Validadas al boot por `Settings(BaseSettings)` en `src/shared/settings.py`. **Nunca commitear `.env`.**
+Template in `.env.example`. Loaded and validated via `pydantic-settings` (`src/shared/settings.py`).
 
-| Variable | Descripción | Requerida |
-|----------|-------------|-----------|
-| `ANTHROPIC_API_KEY` | API key Anthropic (cuenta org para billing separado) | ✅ |
-| `GEMINI_API_KEY` | Google AI Studio API key | ✅ |
-| `DATABASE_URL` | Neon Postgres connection string | ✅ |
-| `MONGODB_URI` | MongoDB Atlas M0 | ✅ |
-| `SQS_LLM_CLASSIFY_ARN` | ARN de la cola LLM creada por backend serverless | ✅ deploy |
-| `SQS_OCR_QUEUE_ARN` | ARN de la cola OCR creada por backend serverless | ✅ deploy |
-| `LOG_LEVEL` | `debug` / `info` / `warning` | ❌ (default: `info`) |
-| `OCR_CONFIDENCE_THRESHOLD` | Umbral Gemini→Claude escalation | ❌ (default: `0.7`) |
-| `LLM_BATCH_SIZE` | Tamaño de lote para clasificación LLM | ❌ (default: `20`) |
-| `SSM_LLM_PAUSED_PARAM` | SSM path para killswitch LLM | ❌ (default: `/innova/llm/paused`) |
-| `SSM_OCR_PAUSED_PARAM` | SSM path para killswitch OCR | ❌ (default: `/innova/ocr/paused`) |
-| `AWS_REGION` | Región AWS para S3/SSM/SQS | ❌ (default: `us-east-1`) |
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Claude API key |
+| `GEMINI_API_KEY` | Google AI Studio key |
+| `GEMINI_MODEL` | Vision/PDF model (default `gemini-2.5-flash`; `gemini-2.0-flash` was retired 2026-06-01) |
+| `DATABASE_URL` | Postgres. **Prod: Supabase session pooler `:5432`** (asyncpg breaks on the transaction pooler's prepared statements). Local: shared backend Postgres on `:5433`. |
+| `MONGODB_URI` | Telemetry/audit Mongo (shared with backend) |
+| `AWS_REGION` | `us-east-1` (handlers read it as `APP_AWS_REGION`, since `AWS_REGION` is reserved inside Lambda) |
+| `SQS_LLM_CLASSIFY_ARN` / `SQS_OCR_QUEUE_ARN` | Triggers owned by the backend stack |
+| `SQS_GUIDE_INGEST_ARN` / `SQS_SOLUTION_GEN_ARN` / `SQS_SUBMISSION_GRADE_ARN` | v9 pipeline triggers |
+| `SQS_SOLUTION_GEN_URL` / `SQS_ATTEMPT_REPROCESS_URL` / `SQS_ADHOC_SOLVE_URL` | Queues this engine publishes to |
+| `S3_GUIDES_BUCKET` / `S3_SUBMISSIONS_BUCKET` | Shared S3 buckets |
+| `SSM_GUIDES_*_PAUSED_PARAM` | SSM kill-switch params (ingest / solution / grading) |
+| `GUIDE_INGEST_CHUNK_PAGES` / `_OVERLAP` / `GUIDE_MIN_EXTRACTION_QUALITY` | Ingest tuning |
+| `SOLUTION_GEN_USE_BATCHES` / `SOLUTION_TOPIC_MIN_CONFIDENCE` | Solution-gen tuning |
+| `GRADING_MIN_TRANSCRIPTION_CONFIDENCE` / `SSM_GUIDES_CHEAP_MODE_PARAM` | Grading tuning |
+| `ALERT_AT_RISK_PKNOWN_FLOOR` / `ALERT_AT_RISK_MIN_TOPICS` / `ALERT_TOPIC_STRUGGLE_RATIO` | Alert thresholds |
+
+> The SQS ARNs/URLs and S3 buckets are **created by the backend Serverless stack**, which is why the deploy
+> order is **backend → ai-engine**.
 
 ---
 
-## 8. Setup local
+## 8. Local setup
 
-### Prerrequisitos
+### Prerequisites
 
-- Python 3.11 (recomendado vía `pyenv` o `.python-version` con `pyenv`)
-- `uv` instalado: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- AWS CLI v2 configurado (solo para deploy — no requerido para tests locales)
+- Python 3.11 (pinned in `.python-version`)
+- [`uv`](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- Docker (to run the backend's `docker-compose` for shared Postgres/Mongo/LocalStack)
+- Anthropic and Gemini API keys (only for features that call them)
 
-### Pasos
+### Steps
 
 ```bash
-# 1. Clonar
-git clone git@github.com:<org>/innova-ai-engine.git
-cd innova-ai-engine
-
-# 2. Instalar dependencias + dev (crea .venv automáticamente)
+# 1. Install deps + dev tools (creates .venv automatically)
 uv sync --all-extras
 
-# 3. Variables de entorno
+# 2. Environment
 cp .env.example .env
-# editar .env con ANTHROPIC_API_KEY, GEMINI_API_KEY, DATABASE_URL
+# edit .env: ANTHROPIC_API_KEY, GEMINI_API_KEY, DATABASE_URL, MONGODB_URI
+
+# 3. Start shared infra from the backend repo (Postgres/Mongo/LocalStack)
+#    (in ../innova-backend-serverless: docker compose up -d)
 
 # 4. Lint + type check
-uv run ruff check src/ tests/
-uv run ruff format --check src/ tests/
-uv run pyright src/                   # 0 errors, 0 warnings (strict mode)
+uv run ruff check src tests
+uv run pyright
 
-# 5. Tests (sin smoke — no requiere API keys)
-uv run pytest -k "not smoke" -q       # 47 tests, ~60s
+# 5. Tests (no smoke — no API keys needed)
+uv run pytest
 ```
 
-### Ejecutar un handler localmente
+### Run a worker locally
+
+Workers are Lambda handlers; invoke them with a simulated event. For example, the nightly BKT job:
 
 ```bash
-# Nightly BKT (simula EventBridge event)
-uv run python -c "
-from src.pipeline.nightly_bkt import handler
-result = handler({'source': 'aws.events'}, None)
-print(result)
-"
-
-# OCR Worker (simula S3 event)
-uv run python -c "
-import json
-from src.pipeline.ocr_worker import handler
-event = {'Records': [{'s3': {'bucket': {'name': 'innova-uploads'}, 'object': {'key': 'test-uuid.jpg'}}}]}
-handler(event, None)
-"
+uv run python -c "from src.pipeline.nightly_bkt import handler; handler({}, None)"
 ```
 
-### Comandos frecuentes
+SQS/S3 workers can be exercised against LocalStack and `moto` fixtures (see `tests/`).
+
+### Curriculum loader
+
+`scripts/curriculum_loader.py` parses the curriculum text files (`../*.txt`) into structured JSON that the
+backend's Prisma seeds consume.
+
+---
+
+## 9. Testing and coverage
 
 ```bash
-uv run pytest -v                       # verbose
-uv run pytest tests/bkt/ -v            # solo BKT
-uv run pytest -m smoke -v              # smoke (1 llamada real a Gemini)
-uv run pytest --cov=src --cov-report=html  # reporte HTML
-uv run ruff check --fix src/           # auto-fix lint
-uv add <package>                       # agregar dependencia
-uv add --dev <package>                 # solo dev
+uv run pytest                    # full suite (excludes smoke)
+uv run pytest --cov=src          # with coverage (gate ≥75%)
+uv run pytest -m smoke           # real API calls — main-branch CI only
+uv run ruff check src tests      # lint
+uv run pyright                   # strict type check (0 errors required)
 ```
+
+Tests cover BKT/IRT math (property + recovery tests with `hypothesis`), the LLM classifier and graders (mocked
+providers; assert `cache_control` and forced `tool_choice`), SQS/S3 flows (`moto`), and the guide pipeline end
+to end. The `smoke` marker gates tests that make real provider calls; they run only on `main`.
 
 ---
 
-## 9. Tests y cobertura
+## 10. Production deployment
+
+Production runs on **AWS account `751871643325`, region `us-east-1`**. The authoritative runbook is
+`../docs/DEPLOY_RUNBOOK.md`.
+
+### Mechanism
+
+- Each worker ships as a **Lambda container image** built from `Dockerfile.lambda`. Native deps (`pypdfium2`,
+  `pillow`) must be installed in the image, not only declared in `pyproject.toml`.
+- `serverless.yml` maps the ten functions to their SQS / cron / HTTP triggers using the ARNs **exported by the
+  backend stack**. Deploy order is **backend → ai-engine**.
+- CI/CD: `.github/workflows/ci.yml` (ruff + pyright + pytest) on PRs; `.github/workflows/deploy.yml` builds
+  and pushes the images and deploys on merge to `main`.
+
+### Required secrets (GitHub Actions)
+
+`AWS_ACCESS_KEY_ID/SECRET_ACCESS_KEY/REGION`, `AWS_ACCOUNT_ID`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
+`DATABASE_URL` (Supabase **session pooler `:5432`**), `MONGODB_URI`, and the SQS ARNs/URLs + S3 buckets that
+point at the backend stack resources (`SQS_GUIDE_INGEST_ARN`, `SQS_SOLUTION_GEN_ARN/URL`,
+`SQS_SUBMISSION_GRADE_ARN`, `SQS_ATTEMPT_REPROCESS_URL`, `S3_GUIDES_BUCKET`, `S3_SUBMISSIONS_BUCKET`,
+`SQS_LLM_CLASSIFY_ARN`, `SQS_OCR_QUEUE_ARN`).
+
+### Verify
 
 ```bash
-uv run pytest -k "not smoke"           # todos los tests sin llamadas reales a APIs (47 tests)
-uv run pytest --cov=src --cov-fail-under=75  # gate ≥75%
-uv run pytest -m smoke                 # smoke (requiere API keys reales, solo en push a main)
-uv run pytest --hypothesis-seed=42     # property-based reproducible
+curl -s https://ai.superprofes.app/health     # 200 OK
 ```
 
-### Suites clave
+### Error catalog
 
-| Suite | Tipo | Qué verifica |
-|-------|------|-------------|
-| `tests/bkt/test_update.py` | Property-based (hypothesis) | `pKnown ∈ [0,1]`, monotonicity, idempotency |
-| `tests/bkt/test_calibrate.py` | Recovery test | 1000 synthetic attempts (10 estudiantes) → `|slip_recovered - slip_true| ≤ 0.15` y `|guess_recovered - guess_true| ≤ 0.15` |
-| `tests/irt/test_two_pl.py` | Recovery test | 1000 synthetic 2PL → `|b_recovered - b_true| < 0.2` (p90) |
-| `tests/llm_classifier/test_client.py` | Mock | `cache_control` presente, `tool_choice` forzado, response parsing |
-| `tests/ocr/test_orchestrator.py` | Mock | Escalation a Claude cuando confidence < 0.7 |
-| `tests/ocr/test_gemini_adapter.py` | Mock + `@smoke` | Schema conformance + 1 llamada real a Gemini (solo main) |
-| `tests/pipeline/test_llm_consumer.py` | Mock asyncpg | SQS batch 20 → LLM call → DB write + `trace_id` propagation |
-| `tests/pipeline/test_ocr_worker.py` | Mock S3 | S3 event → orchestrator → `OcrResult` schema |
-
-Spec completo: `docs/prompt/02-innova-ai-engine-testing.md`
+The proprietary error taxonomy is generated under `out/catalog/` (and `out/error_catalog.jsonl`). The backend
+imports it into the `ErrorTag` table (`pnpm import:catalog`) and regenerates the rule-engine enums
+(`pnpm codegen:error-tags`); activating or deprecating tags requires re-import + re-codegen + redeploy.
 
 ---
 
-## 10. Despliegue (AWS Lambda container images)
+## 11. Cost control
 
-### Prerrequisitos AWS
-
-1. ECR repositories creados por handler:
-   - `innova-llm-classifier`
-   - `innova-ocr-worker`
-   - `innova-nightly-bkt`
-   - `innova-nightly-irt`
-2. Lambda functions creadas con rol IAM que tenga: `sqs:ReceiveMessage`, `s3:GetObject`, `ssm:GetParameter`, `ecr:BatchGetImage`.
-3. SQS event source mappings:
-   - `llm-classify-queue` → `innova-llm-classifier`: `BatchSize=20, MaximumBatchingWindowInSeconds=60`
-   - `attempt-stream.fifo` → `innova-telemetry-persister`: `BatchSize=10`
-4. EventBridge rules:
-   - `cron(0 7 * * ? *)` → `innova-nightly-bkt`
-   - `cron(15 7 * * ? *)` → `innova-nightly-irt`
-
-### Build y deploy de una imagen
-
-```bash
-# Login ECR
-aws ecr get-login-password --region us-east-1 | \
-  docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
-
-# Build imagen del LLM classifier
-docker build -f Dockerfile.llm-classifier \
-  -t <account>.dkr.ecr.us-east-1.amazonaws.com/innova-llm-classifier:latest .
-
-docker push <account>.dkr.ecr.us-east-1.amazonaws.com/innova-llm-classifier:latest
-
-# Update Lambda
-aws lambda update-function-code \
-  --function-name innova-llm-classifier \
-  --image-uri <account>.dkr.ecr.us-east-1.amazonaws.com/innova-llm-classifier:latest
-```
-
-### Build todas las imágenes
-
-```bash
-python scripts/build_lambda_images.py
-```
-
-### CI/CD (GitHub Actions)
-
-`.github/workflows/ci.yml` — en cada PR: ruff + pyright + pytest --cov-fail-under=75
-
-`.github/workflows/deploy-lambdas.yml` — en merge a main:
-
-1. `uv run ruff check && uv run pyright && uv run pytest --cov-fail-under=75`
-2. `docker build` por handler
-3. `docker push` a ECR
-4. `aws lambda update-function-code` por handler
+Inference is the dominant cost, so every provider call records token usage and cost (`src/observability`).
+SSM kill-switch parameters (`/innova/llm/paused`, `/innova/ocr/paused`, `SSM_GUIDES_*_PAUSED_PARAM`) let prod
+pause a stage without a redeploy; workers check them before calling a model and drop to the DLQ with
+`paused_due_to_cost` metadata. Terminal classification/grading failures fail fast (no infinite retries) and a
+"cheap mode" SSM flag downgrades grading under cost pressure.
 
 ---
 
-## 11. Cost engineering
+## 12. Methodology and workflow
 
-Proyección: **1000 alumnos, 660K intentos/mes, 80% catch rate del Rule Engine**
-
-| Componente | Cálculo | Costo/mes |
-|-----------|---------|----------|
-| Claude Haiku 4.5 (LLM batch) | 132K UNCLASSIFIED / 20 = 6,600 calls × (cached+fresh tokens) | ~$28 |
-| Gemini 2.0 Flash (OCR) | primera 1M imágenes = free tier | $0 |
-| Claude Vision (fallback OCR) | 5% × 660K × $0.003/call | ~$1 |
-| Lambda compute (todos los workers) | BKT+IRT+LLM+OCR combinado | ~$1 |
-| **Total AI engine** | | **~$30/mes** |
-
-Costo por intento clasificado por LLM: **~$0.06/1K intentos**.
-
-**Killswitches:**
-
-- SSM Parameter `/innova/llm/paused = true` → LLM consumer cae a DLQ con metadata `paused_due_to_cost`
-- SSM Parameter `/innova/ocr/paused = true` → OCR worker cae a DLQ
-- CloudWatch billing alarm a $80 total → trigger SNS → actualiza SSM params automáticamente
+GSD/BMAD with declared AI-agent usage; living docs in `../docs/`. Gitflow with `develop` as the integration
+branch and a protected `main` (PR + green CI). Conventional Commits in English. Mandatory gates before merge:
+`ruff` (0 issues), `pyright` strict (0 errors), `pytest` (coverage ≥75%).
 
 ---
 
-## 12. Privacidad y cumplimiento NNA
+## 13. License
 
-- **Zero PII en APIs externas:** solo `attempt_id` (UUID), `rawSteps` (strings matemáticos), `topic` llegan a Anthropic/Gemini.
-- Filenames de imágenes: siempre `{uuid_generado}.jpg` — EXIF stripped antes del upload.
-- `student_uuid` es el único identificador de alumno en este engine — nunca nombre ni email.
-- Cumple **COPPA** (alumnos son menores) y **Ley 21.180** (transformación digital Chile).
-- Logs de structlog: `student_uuid` solo en nivel `debug`, `info` no lo expone.
-
----
-
-## 13. Roadmap
-
-| Milestone | Fecha | Entregable |
-|-----------|-------|-----------|
-| M0 | 29 abr | Arquitectura, ADRs, taxonomía de errores |
-| M1 | 30 abr | Instructions + prompts + drawio |
-| M2 | 3 may | Backend skeleton (Entrega 2) |
-| **M3 — AI engine** | **17 may** | `bkt/` + `irt/` + `llm_classifier/` + `ocr/` + Lambda handlers + CI |
-| M4 | 7 jun | Frontend (Entrega 3) |
-| M5 | 12 jun | Integration pilot (curso piloto ~20 alumnos) |
-| M6 | 19 jun | Hardening + monitoring (Entrega 4, pitch incubadora) |
-
----
-
-## 14. Recursos
-
-- Fundamento teórico: `.github/instructions/02-estado-del-arte.md`
-- Modelo cognitivo BKT/IRT: `.github/instructions/04-modelo-cognitivo.md`
-- Pipeline BKT/IRT: `.github/instructions/05-pipeline-bkt-irt.md`
-- LLM Classifier spec: `.github/instructions/06-llm-error-classifier.md`
-- OCR Vision pipeline: `.github/instructions/06b-ocr-vision-pipeline.md`
-- Costos: `.github/instructions/09-costos-y-escalabilidad.md`
-- Testing spec completo: `docs/prompt/02-innova-ai-engine-testing.md`
-- ADRs: `docs/architecture.md`
-- Taxonomía de errores: `docs/error-taxonomy.md`
-
----
-
-## 15. Licencia
-
-Innova - Team 23. Internal GPL-3.0 License.
+Innova — Team 23. Internal GPL-3.0 license.
